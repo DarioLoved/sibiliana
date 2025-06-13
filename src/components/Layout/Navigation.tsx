@@ -1,7 +1,7 @@
 import React from 'react';
-import { Home, Activity, Receipt, BarChart3, History } from 'lucide-react';
+import { Home, Activity, Receipt, History } from 'lucide-react';
 
-export type NavigationTab = 'dashboard' | 'readings' | 'bills' | 'calculations' | 'history';
+export type NavigationTab = 'dashboard' | 'readings' | 'bills' | 'history';
 
 interface NavigationProps {
   activeTab: NavigationTab;
@@ -13,7 +13,6 @@ export function Navigation({ activeTab, onTabChange }: NavigationProps) {
     { id: 'dashboard' as const, label: 'Dashboard', icon: Home },
     { id: 'readings' as const, label: 'Letture', icon: Activity },
     { id: 'bills' as const, label: 'Bollette', icon: Receipt },
-    { id: 'calculations' as const, label: 'Calcoli', icon: BarChart3 },
     { id: 'history' as const, label: 'Storico', icon: History },
   ];
 

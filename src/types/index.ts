@@ -4,24 +4,34 @@ export interface Owner {
   color: string;
 }
 
+export interface Property {
+  id: string;
+  name: string;
+  owners: Owner[];
+  billingCycle: 'monthly' | 'bimonthly';
+  createdAt: string;
+}
+
 export interface MeterReading {
   id: string;
   date: string;
   readings: {
     [ownerId: string]: number;
   };
+  propertyId: string;
 }
 
 export interface Bill {
   id: string;
-  date: string;
+  periodStart: string;
+  periodEnd: string;
   totalAmount: number;
   fixedCosts: number;
   totalConsumption: number;
-  period: {
-    from: string;
-    to: string;
-  };
+  startReadingId: string;
+  endReadingId: string;
+  propertyId: string;
+  calculations?: BillCalculation;
 }
 
 export interface CalculatedExpense {
@@ -36,11 +46,17 @@ export interface CalculatedExpense {
 
 export interface BillCalculation {
   billId: string;
-  date: string;
+  periodStart: string;
+  periodEnd: string;
   totalAmount: number;
+  costPerKwh: number;
   expenses: CalculatedExpense[];
-  period: {
-    from: string;
-    to: string;
-  };
+}
+
+export interface PropertyStats {
+  totalSpent: number;
+  averageMonthlySpent: number;
+  totalConsumption: number;
+  lastBillDate?: string;
+  lastReadingDate?: string;
 }

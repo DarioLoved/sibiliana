@@ -2,38 +2,30 @@ import React, { useState } from 'react';
 import { Card } from '../Common/Card';
 import { Button } from '../Common/Button';
 import { History, Calendar, Receipt, Activity, Filter } from 'lucide-react';
-import { MeterReading, Bill, Owner, BillCalculation } from '../../types';
+import { MeterReading, Bill, Property } from '../../types';
 
 interface HistoryViewProps {
   readings: MeterReading[];
   bills: Bill[];
-  calculations: BillCalculation[];
-  owners: Owner[];
+  property: Property;
 }
 
-type FilterType = 'all' | 'readings' | 'bills' | 'calculations';
+type FilterType = 'all' | 'readings' | 'bills';
 
-export function HistoryView({ readings, bills, calculations, owners }: HistoryViewProps) {
+export function HistoryView({ readings, bills, property }: HistoryViewProps) {
   const [filter, setFilter] = useState<FilterType>('all');
 
   const allItems = [
     ...readings.map(r => ({ ...r, type: 'reading' as const })),
-    ...bills.map(b => ({ ...b, type: 'bill' as const })),
-    ...calculations.map(c => ({ ...c, type: 'calculation' as const, date: c.date })),
+    ...bills.map(b => ({ ...b, type: 'bill' as const, date: b.periodEnd })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const filteredItems = allItems.filter(item => {
     if (filter === 'all') return true;
     if (filter === 'readings') return item.type === 'reading';
     if (filter === 'bills') return item.type === 'bill';
-    if (filter === 'calculations') return item.type === 'calculation';
     return true;
   });
-
-  const getOwnerColor = (ownerId: string) => {
-    const owner = owners.find(o => o.id === ownerId);
-    return owner?.color || '#6B7280';
-  };
 
   const renderItem = (item: any) => {
     const date = new Date(item.date).toLocaleDateString('it-IT');
@@ -48,7 +40,7 @@ export function HistoryView({ readings, bills, calculations, owners }: HistoryVi
             <div className="flex-1">
               <h3 className="font-semibold text-gray-900">Lettura del {date}</h3>
               <div className="flex items-center space-x-6 mt-2">
-                {owners.map((owner) => (
+                {property.owners.map((owner) => (
                   <div key={owner.id} className="flex items-center space-x-2">
                     <div 
                       className="w-3 h-3 rounded-full"
@@ -77,43 +69,30 @@ export function HistoryView({ readings, bills, calculations, owners }: HistoryVi
             <div className="flex-1">
               <h3 className="font-semibold text-gray-900">Bolletta del {date}</h3>
               <p className="text-sm text-gray-600 mt-1">
-                Periodo: {new Date(item.period.from).toLocaleDateString('it-IT')} - {new Date(item.period.to).toLocaleDateString('it-IT')}
+                Periodo: {new Date(item.periodStart).toLocaleDateString('it-IT')} - {new Date(item.periodEnd).toLocaleDateString('it-IT')}
               </p>
               <div className="flex items-center space-x-6 mt-2">
                 <span className="text-sm text-gray-600">Totale: <span className="font-medium text-gray-900">€{item.totalAmount.toFixed(2)}</span></span>
                 <span className="text-sm text-gray-600">Fissi: <span className="font-medium text-gray-900">€{item.fixedCosts.toFixed(2)}</span></span>
                 <span className="text-sm text-gray-600">Consumo: <span className="font-medium text-gray-900">{item.totalConsumption} kWh</span></span>
+                {item.calculations && (
+                  <span className="text-sm text-gray-600">€/kWh: <span className="font-medium text-primary-600">{item.calculations.costPerKwh.toFixed(4)}</span></span>
+                )}
               </div>
-            </div>
-          </div>
-        </Card>
-      );
-    }
-    
-    if (item.type === 'calculation') {
-      return (
-        <Card key={`calculation-${item.billId}`} className="hover:shadow-md transition-shadow">
-          <div className="flex items-center space-x-4">
-            <div className="p-2 bg-accent-50 rounded-lg">
-              <History className="h-5 w-5 text-accent-600" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-semibold text-gray-900">Calcolo del {date}</h3>
-              <p className="text-sm text-gray-600 mt-1">
-                Totale bolletta: €{item.totalAmount.toFixed(2)}
-              </p>
-              <div className="flex items-center space-x-4 mt-2">
-                {item.expenses.map((expense: any) => (
-                  <div key={expense.ownerId} className="flex items-center space-x-2">
-                    <div 
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: getOwnerColor(expense.ownerId) }}
-                    />
-                    <span className="text-sm text-gray-600">{expense.ownerName}:</span>
-                    <span className="text-sm font-medium text-primary-600">€{expense.totalCost.toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
+              {item.calculations && (
+                <div className="flex items-center space-x-4 mt-2">
+                  {item.calculations.expenses.map((expense: any) => (
+                    <div key={expense.ownerId} className="flex items-center space-x-2">
+                      <div 
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: property.owners.find(o => o.id === expense.ownerId)?.color || '#6B7280' }}
+                      />
+                      <span className="text-sm text-gray-600">{expense.ownerName}:</span>
+                      <span className="text-sm font-medium text-primary-600">€{expense.totalCost.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </Card>
@@ -127,7 +106,7 @@ export function HistoryView({ readings, bills, calculations, owners }: HistoryVi
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Storico</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Storico - {property.name}</h2>
           <p className="text-gray-600">Cronologia completa di tutte le operazioni</p>
         </div>
       </div>
@@ -142,7 +121,6 @@ export function HistoryView({ readings, bills, calculations, owners }: HistoryVi
                 { key: 'all', label: 'Tutto' },
                 { key: 'readings', label: 'Letture' },
                 { key: 'bills', label: 'Bollette' },
-                { key: 'calculations', label: 'Calcoli' },
               ].map((option) => (
                 <Button
                   key={option.key}

@@ -1,21 +1,23 @@
 import { Owner, MeterReading, Bill, CalculatedExpense, BillCalculation } from '../types';
 
 export class CalculationService {
-  static calculateExpenses(
+  static calculateBillExpenses(
     bill: Bill,
-    owners: Owner[],
-    readings: MeterReading[]
+    startReading: MeterReading,
+    endReading: MeterReading,
+    owners: Owner[]
   ): BillCalculation {
-    // Find readings for the bill period
-    const periodReadings = this.getReadingsForPeriod(readings, bill.period);
-    
-    if (periodReadings.length < 2) {
-      throw new Error('Servono almeno due letture per calcolare i consumi del periodo');
-    }
-
     // Calculate consumption for each owner
-    const consumptions = this.calculateConsumptions(periodReadings, owners);
-    const totalConsumption = Object.values(consumptions).reduce((sum, consumption) => sum + consumption, 0);
+    const consumptions: { [ownerId: string]: number } = {};
+    let totalConsumption = 0;
+
+    owners.forEach(owner => {
+      const startValue = startReading.readings[owner.id] || 0;
+      const endValue = endReading.readings[owner.id] || 0;
+      const consumption = Math.max(0, endValue - startValue);
+      consumptions[owner.id] = consumption;
+      totalConsumption += consumption;
+    });
 
     // Calculate variable cost per kWh
     const variableCosts = bill.totalAmount - bill.fixedCosts;
@@ -42,39 +44,80 @@ export class CalculationService {
 
     return {
       billId: bill.id,
-      date: bill.date,
+      periodStart: bill.periodStart,
+      periodEnd: bill.periodEnd,
       totalAmount: bill.totalAmount,
+      costPerKwh,
       expenses,
-      period: bill.period,
     };
   }
 
-  private static getReadingsForPeriod(readings: MeterReading[], period: { from: string; to: string }): MeterReading[] {
-    const fromDate = new Date(period.from);
-    const toDate = new Date(period.to);
-    
-    return readings
-      .filter(reading => {
-        const readingDate = new Date(reading.date);
-        return readingDate >= fromDate && readingDate <= toDate;
-      })
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }
+  static calculatePeriodConsumption(readings: MeterReading[], owners: Owner[]): number {
+    if (readings.length < 2) return 0;
 
-  private static calculateConsumptions(readings: MeterReading[], owners: Owner[]): { [ownerId: string]: number } {
-    const consumptions: { [ownerId: string]: number } = {};
-    
-    if (readings.length < 2) return consumptions;
+    const sortedReadings = [...readings].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const firstReading = sortedReadings[0];
+    const lastReading = sortedReadings[sortedReadings.length - 1];
 
-    const firstReading = readings[0];
-    const lastReading = readings[readings.length - 1];
-
+    let totalConsumption = 0;
     owners.forEach(owner => {
-      const firstValue = firstReading.readings[owner.id] || 0;
-      const lastValue = lastReading.readings[owner.id] || 0;
-      consumptions[owner.id] = Math.max(0, lastValue - firstValue);
+      const startValue = firstReading.readings[owner.id] || 0;
+      const endValue = lastReading.readings[owner.id] || 0;
+      totalConsumption += Math.max(0, endValue - startValue);
     });
 
-    return consumptions;
+    return totalConsumption;
+  }
+
+  static getMonthlyStats(bills: Bill[], months: number = 12): { month: string; [ownerName: string]: number }[] {
+    const now = new Date();
+    const monthsData: { month: string; [ownerName: string]: number }[] = [];
+
+    for (let i = months - 1; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthKey = date.toLocaleDateString('it-IT', { month: 'short', year: '2-digit' });
+      
+      const monthData: { month: string; [ownerName: string]: number } = { month: monthKey };
+      
+      // Find bills for this month
+      const monthBills = bills.filter(bill => {
+        const billDate = new Date(bill.periodEnd);
+        return billDate.getMonth() === date.getMonth() && billDate.getFullYear() === date.getFullYear();
+      });
+
+      // Sum expenses for each owner
+      monthBills.forEach(bill => {
+        if (bill.calculations) {
+          bill.calculations.expenses.forEach(expense => {
+            monthData[expense.ownerName] = (monthData[expense.ownerName] || 0) + expense.totalCost;
+          });
+        }
+      });
+
+      monthsData.push(monthData);
+    }
+
+    return monthsData;
+  }
+
+  static getOwnerConsumptionStats(bills: Bill[]): { name: string; value: number; color: string }[] {
+    const ownerStats: { [ownerName: string]: { total: number; color: string } } = {};
+
+    bills.forEach(bill => {
+      if (bill.calculations) {
+        bill.calculations.expenses.forEach(expense => {
+          if (!ownerStats[expense.ownerName]) {
+            ownerStats[expense.ownerName] = { total: 0, color: '#6B7280' };
+          }
+          ownerStats[expense.ownerName].total += expense.consumption;
+        });
+      }
+    });
+
+    return Object.entries(ownerStats).map(([name, stats]) => ({
+      name,
+      value: stats.total,
+      color: stats.color
+    }));
   }
 }

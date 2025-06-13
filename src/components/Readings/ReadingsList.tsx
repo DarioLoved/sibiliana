@@ -1,25 +1,34 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card } from '../Common/Card';
 import { Button } from '../Common/Button';
-import { Calendar, Plus, Edit3 } from 'lucide-react';
-import { MeterReading, Owner } from '../../types';
+import { Modal } from '../Common/Modal';
+import { Calendar, Plus, Edit3, Trash2 } from 'lucide-react';
+import { MeterReading, Property } from '../../types';
 
 interface ReadingsListProps {
   readings: MeterReading[];
-  owners: Owner[];
+  property: Property;
   onAddReading: () => void;
   onEditReading: (reading: MeterReading) => void;
+  onDeleteReading: (reading: MeterReading) => void;
 }
 
-export function ReadingsList({ readings, owners, onAddReading, onEditReading }: ReadingsListProps) {
+export function ReadingsList({ readings, property, onAddReading, onEditReading, onDeleteReading }: ReadingsListProps) {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<MeterReading | null>(null);
+
   const sortedReadings = [...readings].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const handleDelete = (reading: MeterReading) => {
+    onDeleteReading(reading);
+    setShowDeleteConfirm(null);
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Letture Contascatti</h2>
-          <p className="text-gray-600">Gestisci le letture mensili dei contatori</p>
+          <h2 className="text-2xl font-bold text-gray-900">Letture Contascatti - {property.name}</h2>
+          <p className="text-gray-600">Gestisci le letture dei contatori</p>
         </div>
         <Button onClick={onAddReading} icon={Plus}>
           Nuova Lettura
@@ -56,7 +65,7 @@ export function ReadingsList({ readings, owners, onAddReading, onEditReading }: 
                       })}
                     </h3>
                     <div className="flex items-center space-x-6 mt-2">
-                      {owners.map((owner) => (
+                      {property.owners.map((owner) => (
                         <div key={owner.id} className="flex items-center space-x-2">
                           <div 
                             className="w-3 h-3 rounded-full"
@@ -71,19 +80,55 @@ export function ReadingsList({ readings, owners, onAddReading, onEditReading }: 
                     </div>
                   </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={Edit3}
-                  onClick={() => onEditReading(reading)}
-                >
-                  Modifica
-                </Button>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={Edit3}
+                    onClick={() => onEditReading(reading)}
+                  >
+                    Modifica
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={Trash2}
+                    onClick={() => setShowDeleteConfirm(reading)}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    Elimina
+                  </Button>
+                </div>
               </div>
             </Card>
           ))}
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={!!showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(null)}
+        title="Conferma Eliminazione"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-gray-700">
+            Sei sicuro di voler eliminare questa lettura? Questa azione non può essere annullata.
+          </p>
+          <div className="flex justify-end space-x-3">
+            <Button variant="secondary" onClick={() => setShowDeleteConfirm(null)}>
+              Annulla
+            </Button>
+            <Button 
+              variant="danger" 
+              onClick={() => showDeleteConfirm && handleDelete(showDeleteConfirm)}
+            >
+              Elimina
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

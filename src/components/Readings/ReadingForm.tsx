@@ -3,17 +3,17 @@ import { Modal } from '../Common/Modal';
 import { Button } from '../Common/Button';
 import { Input } from '../Common/Input';
 import { Save } from 'lucide-react';
-import { MeterReading, Owner } from '../../types';
+import { MeterReading, Property } from '../../types';
 
 interface ReadingFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (reading: Omit<MeterReading, 'id'>) => void;
-  owners: Owner[];
+  onSave: (reading: Omit<MeterReading, 'id' | 'propertyId'>) => void;
+  property: Property;
   editingReading?: MeterReading;
 }
 
-export function ReadingForm({ isOpen, onClose, onSave, owners, editingReading }: ReadingFormProps) {
+export function ReadingForm({ isOpen, onClose, onSave, property, editingReading }: ReadingFormProps) {
   const [date, setDate] = useState('');
   const [readings, setReadings] = useState<{ [ownerId: string]: string }>({});
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -29,13 +29,13 @@ export function ReadingForm({ isOpen, onClose, onSave, owners, editingReading }:
     } else {
       setDate(new Date().toISOString().split('T')[0]);
       const initialReadings: { [ownerId: string]: string } = {};
-      owners.forEach(owner => {
+      property.owners.forEach(owner => {
         initialReadings[owner.id] = '';
       });
       setReadings(initialReadings);
     }
     setErrors({});
-  }, [editingReading, owners, isOpen]);
+  }, [editingReading, property.owners, isOpen]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +46,7 @@ export function ReadingForm({ isOpen, onClose, onSave, owners, editingReading }:
       newErrors.date = 'La data è obbligatoria';
     }
     
-    owners.forEach(owner => {
+    property.owners.forEach(owner => {
       if (!readings[owner.id] || readings[owner.id].trim() === '') {
         newErrors[owner.id] = `Lettura per ${owner.name} è obbligatoria`;
       } else if (isNaN(Number(readings[owner.id]))) {
@@ -106,7 +106,7 @@ export function ReadingForm({ isOpen, onClose, onSave, owners, editingReading }:
 
         <div className="space-y-4">
           <h3 className="text-lg font-medium text-gray-900">Letture Contascatti</h3>
-          {owners.map((owner) => (
+          {property.owners.map((owner) => (
             <div key={owner.id} className="flex items-center space-x-4">
               <div 
                 className="w-4 h-4 rounded-full flex-shrink-0"

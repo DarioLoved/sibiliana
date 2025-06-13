@@ -22,7 +22,7 @@ export class ReportService {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `spese-energia-${new Date(calculation.date).toLocaleDateString('it-IT').replace(/\//g, '-')}.png`;
+          a.download = `spese-energia-${new Date(calculation.periodEnd).toLocaleDateString('it-IT').replace(/\//g, '-')}.png`;
           a.click();
           URL.revokeObjectURL(url);
         });
@@ -60,9 +60,9 @@ export class ReportService {
     div.innerHTML = `
       <div style="text-align: center; margin-bottom: 40px; border-bottom: 2px solid #e5e7eb; padding-bottom: 20px;">
         <h1 style="color: #2563eb; font-size: 28px; margin-bottom: 8px; font-weight: bold;">Casa Mare - Gestione Spese Energia</h1>
-        <h2 style="color: #4b5563; font-size: 20px; margin: 0;">Riepilogo Spese del ${new Date(calculation.date).toLocaleDateString('it-IT')}</h2>
+        <h2 style="color: #4b5563; font-size: 20px; margin: 0;">Riepilogo Spese</h2>
         <p style="color: #6b7280; margin-top: 8px; font-size: 14px;">
-          Periodo: ${new Date(calculation.period.from).toLocaleDateString('it-IT')} - ${new Date(calculation.period.to).toLocaleDateString('it-IT')}
+          Periodo: ${new Date(calculation.periodStart).toLocaleDateString('it-IT')} - ${new Date(calculation.periodEnd).toLocaleDateString('it-IT')}
         </p>
       </div>
 
@@ -71,6 +71,10 @@ export class ReportService {
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
           <span style="color: #6b7280;">Importo Totale Bolletta:</span>
           <span style="font-weight: bold; color: #1f2937; font-size: 18px;">€${calculation.totalAmount.toFixed(2)}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span style="color: #6b7280;">Costo per kWh:</span>
+          <span style="font-weight: bold; color: #2563eb; font-size: 16px;">€${calculation.costPerKwh.toFixed(4)}/kWh</span>
         </div>
       </div>
 
@@ -122,11 +126,12 @@ export class ReportService {
   private static downloadTextReport(calculation: BillCalculation): void {
     const reportText = `
 CASA MARE - GESTIONE SPESE ENERGIA
-Riepilogo Spese del ${new Date(calculation.date).toLocaleDateString('it-IT')}
-Periodo: ${new Date(calculation.period.from).toLocaleDateString('it-IT')} - ${new Date(calculation.period.to).toLocaleDateString('it-IT')}
+Riepilogo Spese
+Periodo: ${new Date(calculation.periodStart).toLocaleDateString('it-IT')} - ${new Date(calculation.periodEnd).toLocaleDateString('it-IT')}
 
 DETTAGLI BOLLETTA
 Importo Totale: €${calculation.totalAmount.toFixed(2)}
+Costo per kWh: €${calculation.costPerKwh.toFixed(4)}/kWh
 
 RIPARTIZIONE SPESE:
 ${calculation.expenses.map(expense => `
@@ -144,7 +149,7 @@ Report generato il ${new Date().toLocaleString('it-IT')}
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `spese-energia-${new Date(calculation.date).toLocaleDateString('it-IT').replace(/\//g, '-')}.txt`;
+    a.download = `spese-energia-${new Date(calculation.periodEnd).toLocaleDateString('it-IT').replace(/\//g, '-')}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   }
