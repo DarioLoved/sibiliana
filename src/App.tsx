@@ -27,6 +27,7 @@ function App() {
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   
   const [readings, setReadings] = useState<MeterReading[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
@@ -42,10 +43,10 @@ function App() {
   
   const { notifications, addNotification, markAsRead } = useNotifications();
 
-  // Restore app state on load
+  // Initialize app state only once
   useEffect(() => {
-    const restoreAppState = async () => {
-      if (appState.selectedPropertyId) {
+    const initializeApp = async () => {
+      if (appState.selectedPropertyId && !isInitialized) {
         try {
           const property = await FirebaseService.getProperty(appState.selectedPropertyId);
           if (property) {
@@ -62,25 +63,26 @@ function App() {
           clearAppState();
         }
       }
+      setIsInitialized(true);
     };
 
-    restoreAppState();
-  }, [appState.selectedPropertyId, appState.activeTab, clearAppState]);
+    initializeApp();
+  }, []); // Only run once on mount
 
   // Load property data when property is selected
   useEffect(() => {
-    if (selectedProperty) {
+    if (selectedProperty && isInitialized) {
       loadPropertyData(selectedProperty.id);
       updateAppState({ selectedPropertyId: selectedProperty.id });
     }
-  }, [selectedProperty, updateAppState]);
+  }, [selectedProperty, isInitialized]);
 
   // Update active tab in app state
   useEffect(() => {
-    if (selectedProperty) {
+    if (selectedProperty && isInitialized) {
       updateAppState({ activeTab });
     }
-  }, [activeTab, selectedProperty, updateAppState]);
+  }, [activeTab, selectedProperty, isInitialized]);
 
   const loadPropertyData = async (propertyId: string) => {
     setIsLoading(true);
@@ -350,6 +352,15 @@ function App() {
         return null;
     }
   };
+
+  // Don't render anything until initialized
+  if (!isInitialized) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-xl font-semibold text-gray-700">Inizializzazione...</div>
+      </div>
+    );
+  }
 
   if (!selectedProperty) {
     return <PropertySelector onPropertySelect={handlePropertySelect} />;

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { AppState } from '../types';
 
 const APP_STATE_KEY = 'casa-mare-app-state';
@@ -13,18 +13,18 @@ export function useAppState() {
     }
   });
 
-  const updateAppState = (updates: Partial<AppState>) => {
+  const updateAppState = useCallback((updates: Partial<AppState>) => {
     setAppState(prev => {
       const newState = { ...prev, ...updates };
       localStorage.setItem(APP_STATE_KEY, JSON.stringify(newState));
       return newState;
     });
-  };
+  }, []);
 
-  const clearAppState = () => {
+  const clearAppState = useCallback(() => {
     setAppState({});
     localStorage.removeItem(APP_STATE_KEY);
-  };
+  }, []);
 
   return {
     appState,
