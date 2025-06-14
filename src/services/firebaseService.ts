@@ -36,6 +36,19 @@ export class FirebaseService {
   }
 
   static async deleteProperty(propertyId: string): Promise<void> {
+    // Delete all readings
+    const readingsQuery = query(collection(db, 'properties', propertyId, 'readings'));
+    const readingsSnapshot = await getDocs(readingsQuery);
+    const readingDeletePromises = readingsSnapshot.docs.map(doc => deleteDoc(doc.ref));
+    await Promise.all(readingDeletePromises);
+
+    // Delete all bills
+    const billsQuery = query(collection(db, 'properties', propertyId, 'bills'));
+    const billsSnapshot = await getDocs(billsQuery);
+    const billDeletePromises = billsSnapshot.docs.map(doc => deleteDoc(doc.ref));
+    await Promise.all(billDeletePromises);
+
+    // Delete the property
     await deleteDoc(doc(db, 'properties', propertyId));
   }
 
@@ -52,7 +65,8 @@ export class FirebaseService {
   static async createReading(propertyId: string, reading: Omit<MeterReading, 'id' | 'propertyId'>): Promise<string> {
     const docRef = await addDoc(collection(db, 'properties', propertyId, 'readings'), {
       ...reading,
-      propertyId
+      propertyId,
+      createdAt: new Date().toISOString()
     });
     return docRef.id;
   }
@@ -78,7 +92,8 @@ export class FirebaseService {
   static async createBill(propertyId: string, bill: Omit<Bill, 'id' | 'propertyId'>): Promise<string> {
     const docRef = await addDoc(collection(db, 'properties', propertyId, 'bills'), {
       ...bill,
-      propertyId
+      propertyId,
+      createdAt: new Date().toISOString()
     });
     return docRef.id;
   }

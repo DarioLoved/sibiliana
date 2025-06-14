@@ -10,6 +10,20 @@ export interface Property {
   owners: Owner[];
   billingCycle: 'monthly' | 'bimonthly';
   createdAt: string;
+  permissions?: PropertyPermissions;
+}
+
+export interface PropertyPermissions {
+  admins: string[]; // User IDs with full access
+  viewers: string[]; // User IDs with read-only access
+  editors: string[]; // User IDs with edit access but can't delete
+}
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: 'admin' | 'user';
 }
 
 export interface MeterReading {
@@ -19,6 +33,8 @@ export interface MeterReading {
     [ownerId: string]: number;
   };
   propertyId: string;
+  createdBy?: string;
+  createdAt?: string;
 }
 
 export interface Bill {
@@ -32,6 +48,8 @@ export interface Bill {
   endReadingId: string;
   propertyId: string;
   calculations?: BillCalculation;
+  createdBy?: string;
+  createdAt?: string;
 }
 
 export interface CalculatedExpense {
@@ -59,4 +77,9 @@ export interface PropertyStats {
   totalConsumption: number;
   lastBillDate?: string;
   lastReadingDate?: string;
+}
+
+export interface AppState {
+  selectedPropertyId?: string;
+  activeTab?: string;
 }

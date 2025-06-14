@@ -15,6 +15,7 @@ import { NotificationPanel } from './components/Notifications/NotificationPanel'
 
 // Hooks and services
 import { useNotifications } from './hooks/useNotifications';
+import { useAppState } from './hooks/useAppState';
 import { FirebaseService } from './services/firebaseService';
 import { CalculationService } from './services/calculationService';
 
@@ -22,8 +23,10 @@ import { CalculationService } from './services/calculationService';
 import { Property, MeterReading, Bill } from './types';
 
 function App() {
+  const { appState, updateAppState, clearAppState } = useAppState();
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   const [readings, setReadings] = useState<MeterReading[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
@@ -39,12 +42,45 @@ function App() {
   
   const { notifications, addNotification, markAsRead } = useNotifications();
 
+  // Restore app state on load
+  useEffect(() => {
+    const restoreAppState = async () => {
+      if (appState.selectedPropertyId) {
+        try {
+          const property = await FirebaseService.getProperty(appState.selectedPropertyId);
+          if (property) {
+            setSelectedProperty(property);
+            if (appState.activeTab) {
+              setActiveTab(appState.activeTab as NavigationTab);
+            }
+          } else {
+            // Property no longer exists, clear state
+            clearAppState();
+          }
+        } catch (error) {
+          console.error('Error restoring app state:', error);
+          clearAppState();
+        }
+      }
+    };
+
+    restoreAppState();
+  }, [appState.selectedPropertyId, appState.activeTab, clearAppState]);
+
   // Load property data when property is selected
   useEffect(() => {
     if (selectedProperty) {
       loadPropertyData(selectedProperty.id);
+      updateAppState({ selectedPropertyId: selectedProperty.id });
     }
-  }, [selectedProperty]);
+  }, [selectedProperty, updateAppState]);
+
+  // Update active tab in app state
+  useEffect(() => {
+    if (selectedProperty) {
+      updateAppState({ activeTab });
+    }
+  }, [activeTab, selectedProperty, updateAppState]);
 
   const loadPropertyData = async (propertyId: string) => {
     setIsLoading(true);
@@ -89,6 +125,24 @@ function App() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handlePropertySelect = (property: Property) => {
+    setSelectedProperty(property);
+    setActiveTab('dashboard');
+    setIsMobileMenuOpen(false);
+  };
+
+  const handleBackToProperties = () => {
+    setSelectedProperty(null);
+    clearAppState();
+    setActiveTab('dashboard');
+    setIsMobileMenuOpen(false);
+  };
+
+  const handleTabChange = (tab: NavigationTab) => {
+    setActiveTab(tab);
+    setIsMobileMenuOpen(false);
   };
 
   const handleSaveReading = async (readingData: Omit<MeterReading, 'id' | 'propertyId'>) => {
@@ -298,7 +352,7 @@ function App() {
   };
 
   if (!selectedProperty) {
-    return <PropertySelector onPropertySelect={setSelectedProperty} />;
+    return <PropertySelector onPropertySelect={handlePropertySelect} />;
   }
 
   if (isLoading) {
@@ -310,15 +364,21 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-16 sm:pb-0">
       <Header 
         property={selectedProperty}
         onNotificationsClick={() => setShowNotifications(true)}
         onSettingsClick={() => setShowPropertySettings(true)}
-        onBackToProperties={() => setSelectedProperty(null)}
+        onBackToProperties={handleBackToProperties}
+        onMenuClick={() => setIsMobileMenuOpen(true)}
       />
-      <Navigation activeTab={activeTab} onTabChange={setActiveTab} />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <Navigation 
+        activeTab={activeTab} 
+        onTabChange={handleTabChange}
+        isMobileMenuOpen={isMobileMenuOpen}
+        onCloseMobileMenu={() => setIsMobileMenuOpen(false)}
+      />
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         {renderContent()}
       </main>
 

@@ -1,126 +1,113 @@
+import jsPDF from 'jspdf';
 import { BillCalculation, Owner } from '../types';
 
 export class ReportService {
   static async generateReport(calculation: BillCalculation, owners: Owner[]): Promise<void> {
-    // Create a report element
-    const reportElement = this.createReportElement(calculation, owners);
-    
-    // Add to DOM temporarily
-    document.body.appendChild(reportElement);
-    
     try {
-      // Try to use html2canvas if available
-      if (typeof window !== 'undefined' && (window as any).html2canvas) {
-        const canvas = await (window as any).html2canvas(reportElement, {
-          backgroundColor: '#ffffff',
-          scale: 2,
-          useCORS: true,
-        });
+      const pdf = new jsPDF();
+      
+      // Set up fonts and colors
+      pdf.setFont('helvetica');
+      
+      // Header
+      pdf.setFontSize(20);
+      pdf.setTextColor(37, 99, 235); // Primary blue
+      pdf.text('Casa Mare - Gestione Spese Energia', 20, 25);
+      
+      pdf.setFontSize(16);
+      pdf.setTextColor(75, 85, 99); // Gray
+      pdf.text('Riepilogo Spese', 20, 35);
+      
+      pdf.setFontSize(12);
+      pdf.setTextColor(107, 114, 128); // Light gray
+      const periodText = `Periodo: ${new Date(calculation.periodStart).toLocaleDateString('it-IT')} - ${new Date(calculation.periodEnd).toLocaleDateString('it-IT')}`;
+      pdf.text(periodText, 20, 45);
+      
+      // Line separator
+      pdf.setDrawColor(229, 231, 235);
+      pdf.line(20, 50, 190, 50);
+      
+      // Bill details section
+      pdf.setFontSize(14);
+      pdf.setTextColor(55, 65, 81); // Dark gray
+      pdf.text('Dettagli Bolletta', 20, 65);
+      
+      pdf.setFontSize(11);
+      pdf.setTextColor(107, 114, 128);
+      pdf.text('Importo Totale Bolletta:', 20, 75);
+      pdf.setTextColor(31, 41, 55);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`€${calculation.totalAmount.toFixed(2)}`, 150, 75);
+      
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(107, 114, 128);
+      pdf.text('Costo per kWh:', 20, 85);
+      pdf.setTextColor(37, 99, 235);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`€${calculation.costPerKwh.toFixed(4)}/kWh`, 150, 85);
+      
+      // Expenses section
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(14);
+      pdf.setTextColor(55, 65, 81);
+      pdf.text('Ripartizione Spese per Proprietario', 20, 105);
+      
+      let yPosition = 120;
+      
+      calculation.expenses.forEach((expense, index) => {
+        const owner = owners.find(o => o.id === expense.ownerId);
         
-        // Convert to blob and download
-        canvas.toBlob((blob: Blob) => {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `spese-energia-${new Date(calculation.periodEnd).toLocaleDateString('it-IT').replace(/\//g, '-')}.png`;
-          a.click();
-          URL.revokeObjectURL(url);
-        });
-      } else {
-        // Fallback: generate text report
-        this.downloadTextReport(calculation);
-      }
+        // Owner name with color indicator
+        pdf.setFontSize(12);
+        pdf.setTextColor(31, 41, 55);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(`● ${expense.ownerName}`, 20, yPosition);
+        
+        // Owner details
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(10);
+        pdf.setTextColor(107, 114, 128);
+        
+        yPosition += 10;
+        pdf.text(`Consumo: ${expense.consumption.toFixed(1)} kWh (${expense.percentage.toFixed(1)}%)`, 25, yPosition);
+        
+        yPosition += 8;
+        pdf.text(`Costo consumo: €${expense.consumptionCost.toFixed(2)}`, 25, yPosition);
+        
+        yPosition += 8;
+        pdf.text(`Costi fissi: €${expense.fixedCost.toFixed(2)}`, 25, yPosition);
+        
+        yPosition += 8;
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(37, 99, 235);
+        pdf.text(`TOTALE DA PAGARE: €${expense.totalCost.toFixed(2)}`, 25, yPosition);
+        
+        // Add some space between owners
+        yPosition += 20;
+        
+        // Add new page if needed
+        if (yPosition > 250 && index < calculation.expenses.length - 1) {
+          pdf.addPage();
+          yPosition = 30;
+        }
+      });
+      
+      // Footer
+      const pageHeight = pdf.internal.pageSize.height;
+      pdf.setFontSize(8);
+      pdf.setTextColor(107, 114, 128);
+      pdf.text(`Report generato automaticamente il ${new Date().toLocaleString('it-IT')}`, 20, pageHeight - 20);
+      pdf.text('App Casa Mare - Gestione Spese Energia', 20, pageHeight - 15);
+      
+      // Save the PDF
+      const fileName = `spese-energia-${new Date(calculation.periodEnd).toLocaleDateString('it-IT').replace(/\//g, '-')}.pdf`;
+      pdf.save(fileName);
+      
     } catch (error) {
-      console.error('Error generating report:', error);
+      console.error('Error generating PDF report:', error);
+      // Fallback to text report
       this.downloadTextReport(calculation);
-    } finally {
-      // Remove from DOM
-      document.body.removeChild(reportElement);
     }
-  }
-
-  private static createReportElement(calculation: BillCalculation, owners: Owner[]): HTMLElement {
-    const div = document.createElement('div');
-    div.style.cssText = `
-      width: 800px;
-      padding: 40px;
-      background: white;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      color: #1f2937;
-      position: absolute;
-      left: -9999px;
-      top: -9999px;
-    `;
-
-    const getOwnerColor = (ownerId: string) => {
-      const owner = owners.find(o => o.id === ownerId);
-      return owner?.color || '#6B7280';
-    };
-
-    div.innerHTML = `
-      <div style="text-align: center; margin-bottom: 40px; border-bottom: 2px solid #e5e7eb; padding-bottom: 20px;">
-        <h1 style="color: #2563eb; font-size: 28px; margin-bottom: 8px; font-weight: bold;">Casa Mare - Gestione Spese Energia</h1>
-        <h2 style="color: #4b5563; font-size: 20px; margin: 0;">Riepilogo Spese</h2>
-        <p style="color: #6b7280; margin-top: 8px; font-size: 14px;">
-          Periodo: ${new Date(calculation.periodStart).toLocaleDateString('it-IT')} - ${new Date(calculation.periodEnd).toLocaleDateString('it-IT')}
-        </p>
-      </div>
-
-      <div style="margin-bottom: 30px; background: #f9fafb; padding: 20px; border-radius: 8px;">
-        <h3 style="color: #374151; font-size: 18px; margin-bottom: 12px;">Dettagli Bolletta</h3>
-        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-          <span style="color: #6b7280;">Importo Totale Bolletta:</span>
-          <span style="font-weight: bold; color: #1f2937; font-size: 18px;">€${calculation.totalAmount.toFixed(2)}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-          <span style="color: #6b7280;">Costo per kWh:</span>
-          <span style="font-weight: bold; color: #2563eb; font-size: 16px;">€${calculation.costPerKwh.toFixed(4)}/kWh</span>
-        </div>
-      </div>
-
-      <div style="margin-bottom: 30px;">
-        <h3 style="color: #374151; font-size: 18px; margin-bottom: 16px;">Ripartizione Spese per Proprietario</h3>
-        ${calculation.expenses.map(expense => `
-          <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 16px; background: white;">
-            <div style="display: flex; align-items: center; margin-bottom: 12px;">
-              <div style="width: 16px; height: 16px; border-radius: 50%; background: ${getOwnerColor(expense.ownerId)}; margin-right: 12px;"></div>
-              <h4 style="font-size: 16px; font-weight: bold; color: #1f2937; margin: 0;">${expense.ownerName}</h4>
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 14px;">
-              <div>
-                <span style="color: #6b7280;">Consumo:</span>
-                <span style="font-weight: 500; margin-left: 8px;">${expense.consumption.toFixed(1)} kWh</span>
-              </div>
-              <div>
-                <span style="color: #6b7280;">Percentuale:</span>
-                <span style="font-weight: 500; margin-left: 8px;">${expense.percentage.toFixed(1)}%</span>
-              </div>
-              <div>
-                <span style="color: #6b7280;">Costo consumo:</span>
-                <span style="font-weight: 500; margin-left: 8px;">€${expense.consumptionCost.toFixed(2)}</span>
-              </div>
-              <div>
-                <span style="color: #6b7280;">Costi fissi:</span>
-                <span style="font-weight: 500; margin-left: 8px;">€${expense.fixedCost.toFixed(2)}</span>
-              </div>
-            </div>
-            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb;">
-              <div style="display: flex; justify-content: between; align-items: center;">
-                <span style="font-weight: bold; color: #1f2937;">Totale da pagare:</span>
-                <span style="font-weight: bold; color: #2563eb; font-size: 18px; margin-left: auto;">€${expense.totalCost.toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-
-      <div style="text-align: center; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px;">
-        <p>Report generato automaticamente il ${new Date().toLocaleString('it-IT')}</p>
-        <p>App Casa Mare - Gestione Spese Energia</p>
-      </div>
-    `;
-
-    return div;
   }
 
   private static downloadTextReport(calculation: BillCalculation): void {

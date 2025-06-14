@@ -3,7 +3,7 @@ import { Card } from '../Common/Card';
 import { Button } from '../Common/Button';
 import { Modal } from '../Common/Modal';
 import { Input } from '../Common/Input';
-import { Home, Plus, Settings, Trash2 } from 'lucide-react';
+import { Home, Plus, Settings, Trash2, Users, Eye, Edit3 } from 'lucide-react';
 import { Property, Owner } from '../../types';
 import { FirebaseService } from '../../services/firebaseService';
 
@@ -14,6 +14,7 @@ interface PropertySelectorProps {
 export function PropertySelector({ onPropertySelect }: PropertySelectorProps) {
   const [properties, setProperties] = useState<Property[]>([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,6 +43,16 @@ export function PropertySelector({ onPropertySelect }: PropertySelectorProps) {
     }
   };
 
+  const handleDeleteProperty = async (property: Property) => {
+    try {
+      await FirebaseService.deleteProperty(property.id);
+      setProperties(prev => prev.filter(p => p.id !== property.id));
+      setShowDeleteConfirm(null);
+    } catch (error) {
+      console.error('Error deleting property:', error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -51,44 +62,64 @@ export function PropertySelector({ onPropertySelect }: PropertySelectorProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <div className="p-4 bg-primary-600 rounded-full w-16 h-16 mx-auto mb-4">
-            <Home className="h-8 w-8 text-white" />
+    <div className="min-h-screen bg-gray-50 py-6 sm:py-12 pb-20 sm:pb-12">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-8 sm:mb-12">
+          <div className="p-3 sm:p-4 bg-primary-600 rounded-full w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4">
+            <Home className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Gestione Spese Energia</h1>
-          <p className="text-gray-600">Seleziona una proprietà da gestire o creane una nuova</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Gestione Spese Energia</h1>
+          <p className="text-gray-600 text-sm sm:text-base">Seleziona una proprietà da gestire o creane una nuova</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
           {properties.map((property) => (
-            <Card key={property.id} className="hover:shadow-lg transition-shadow cursor-pointer">
-              <div onClick={() => onPropertySelect(property)} className="p-2">
-                <div className="flex items-center space-x-3 mb-4">
-                  <div className="p-2 bg-primary-50 rounded-lg">
-                    <Home className="h-5 w-5 text-primary-600" />
+            <Card key={property.id} className="hover:shadow-lg transition-shadow">
+              <div className="p-4 sm:p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div 
+                    onClick={() => onPropertySelect(property)} 
+                    className="flex items-center space-x-3 cursor-pointer flex-1 min-w-0"
+                  >
+                    <div className="p-2 bg-primary-50 rounded-lg flex-shrink-0">
+                      <Home className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate">{property.name}</h3>
+                      <p className="text-xs sm:text-sm text-gray-600">
+                        {property.billingCycle === 'monthly' ? 'Mensile' : 'Bimestrale'}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{property.name}</h3>
-                    <p className="text-sm text-gray-600">
-                      {property.billingCycle === 'monthly' ? 'Mensile' : 'Bimestrale'}
-                    </p>
-                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={Trash2}
+                    onClick={() => setShowDeleteConfirm(property)}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0 ml-2"
+                  />
                 </div>
                 
-                <div className="space-y-2">
-                  <p className="text-sm text-gray-600">Proprietari:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {property.owners.map((owner) => (
-                      <div key={owner.id} className="flex items-center space-x-1">
-                        <div 
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: owner.color }}
-                        />
-                        <span className="text-xs text-gray-700">{owner.name}</span>
-                      </div>
-                    ))}
+                <div 
+                  onClick={() => onPropertySelect(property)} 
+                  className="cursor-pointer"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <Users className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400" />
+                      <p className="text-xs sm:text-sm text-gray-600">Proprietari ({property.owners.length}):</p>
+                    </div>
+                    <div className="flex flex-wrap gap-1 sm:gap-2">
+                      {property.owners.map((owner) => (
+                        <div key={owner.id} className="flex items-center space-x-1">
+                          <div 
+                            className="w-2 h-2 sm:w-3 sm:h-3 rounded-full"
+                            style={{ backgroundColor: owner.color }}
+                          />
+                          <span className="text-xs text-gray-700">{owner.name}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -98,10 +129,10 @@ export function PropertySelector({ onPropertySelect }: PropertySelectorProps) {
           <Card className="border-2 border-dashed border-gray-300 hover:border-primary-400 transition-colors">
             <div 
               onClick={() => setShowCreateForm(true)}
-              className="flex flex-col items-center justify-center p-8 cursor-pointer"
+              className="flex flex-col items-center justify-center p-6 sm:p-8 cursor-pointer"
             >
-              <Plus className="h-8 w-8 text-gray-400 mb-2" />
-              <span className="text-gray-600 font-medium">Nuova Proprietà</span>
+              <Plus className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 mb-2" />
+              <span className="text-gray-600 font-medium text-sm sm:text-base">Nuova Proprietà</span>
             </div>
           </Card>
         </div>
@@ -111,6 +142,33 @@ export function PropertySelector({ onPropertySelect }: PropertySelectorProps) {
           onClose={() => setShowCreateForm(false)}
           onSave={handleCreateProperty}
         />
+
+        {/* Delete Confirmation Modal */}
+        <Modal
+          isOpen={!!showDeleteConfirm}
+          onClose={() => setShowDeleteConfirm(null)}
+          title="Conferma Eliminazione"
+          size="sm"
+        >
+          <div className="space-y-4">
+            <p className="text-gray-700">
+              Sei sicuro di voler eliminare la proprietà "{showDeleteConfirm?.name}"? 
+              Tutti i dati associati (letture, bollette, calcoli) verranno eliminati definitivamente.
+              Questa azione non può essere annullata.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <Button variant="secondary" onClick={() => setShowDeleteConfirm(null)}>
+                Annulla
+              </Button>
+              <Button 
+                variant="danger" 
+                onClick={() => showDeleteConfirm && handleDeleteProperty(showDeleteConfirm)}
+              >
+                Elimina Definitivamente
+              </Button>
+            </div>
+          </div>
+        </Modal>
       </div>
     </div>
   );
@@ -127,11 +185,7 @@ function PropertyForm({ isOpen, onClose, onSave, editingProperty }: PropertyForm
   const [formData, setFormData] = useState({
     name: '',
     billingCycle: 'bimonthly' as 'monthly' | 'bimonthly',
-    owners: [
-      { id: '1', name: 'Dino', color: '#3b82f6' },
-      { id: '2', name: 'Uccio', color: '#059669' },
-      { id: '3', name: 'Filippo', color: '#f97316' },
-    ] as Owner[]
+    owners: [] as Owner[]
   });
 
   useEffect(() => {
@@ -146,9 +200,7 @@ function PropertyForm({ isOpen, onClose, onSave, editingProperty }: PropertyForm
         name: '',
         billingCycle: 'bimonthly',
         owners: [
-          { id: '1', name: 'Dino', color: '#3b82f6' },
-          { id: '2', name: 'Uccio', color: '#059669' },
-          { id: '3', name: 'Filippo', color: '#f97316' },
+          { id: '1', name: '', color: '#3b82f6' }
         ]
       });
     }
@@ -156,17 +208,46 @@ function PropertyForm({ isOpen, onClose, onSave, editingProperty }: PropertyForm
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate that all owners have names
+    const validOwners = formData.owners.filter(owner => owner.name.trim() !== '');
+    if (validOwners.length === 0) {
+      alert('Devi aggiungere almeno un proprietario');
+      return;
+    }
+
     onSave({
       ...formData,
+      owners: validOwners,
       createdAt: new Date().toISOString()
     });
   };
 
-  const updateOwner = (index: number, field: keyof Owner, value: string) => {
+  const addOwner = () => {
+    const colors = ['#3b82f6', '#059669', '#f97316', '#8b5cf6', '#ef4444', '#06b6d4', '#84cc16', '#f59e0b'];
+    const newOwner: Owner = {
+      id: Date.now().toString(),
+      name: '',
+      color: colors[formData.owners.length % colors.length]
+    };
     setFormData(prev => ({
       ...prev,
-      owners: prev.owners.map((owner, i) => 
-        i === index ? { ...owner, [field]: value } : owner
+      owners: [...prev.owners, newOwner]
+    }));
+  };
+
+  const removeOwner = (ownerId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      owners: prev.owners.filter(owner => owner.id !== ownerId)
+    }));
+  };
+
+  const updateOwner = (ownerId: string, field: keyof Owner, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      owners: prev.owners.map(owner => 
+        owner.id === ownerId ? { ...owner, [field]: value } : owner
       )
     }));
   };
@@ -216,22 +297,48 @@ function PropertyForm({ isOpen, onClose, onSave, editingProperty }: PropertyForm
         </div>
 
         <div>
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Proprietari</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-900">Proprietari</h3>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              icon={Plus}
+              onClick={addOwner}
+            >
+              Aggiungi
+            </Button>
+          </div>
+          
           <div className="space-y-4">
             {formData.owners.map((owner, index) => (
-              <div key={owner.id} className="flex items-center space-x-4">
+              <div key={owner.id} className="flex items-center space-x-4 p-4 border border-gray-200 rounded-lg">
                 <input
                   type="color"
                   value={owner.color}
-                  onChange={(e) => updateOwner(index, 'color', e.target.value)}
+                  onChange={(e) => updateOwner(owner.id, 'color', e.target.value)}
                   className="w-8 h-8 rounded border"
                 />
-                <Input
-                  value={owner.name}
-                  onChange={(e) => updateOwner(index, 'name', e.target.value)}
-                  placeholder="Nome proprietario"
-                  required
-                />
+                <div className="flex-1">
+                  <Input
+                    value={owner.name}
+                    onChange={(e) => updateOwner(owner.id, 'name', e.target.value)}
+                    placeholder="Nome proprietario"
+                    required
+                  />
+                </div>
+                {formData.owners.length > 1 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    icon={Trash2}
+                    onClick={() => removeOwner(owner.id)}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    Rimuovi
+                  </Button>
+                )}
               </div>
             ))}
           </div>
