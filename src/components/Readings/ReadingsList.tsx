@@ -24,7 +24,7 @@ export function ReadingsList({ readings, property, onAddReading, onEditReading, 
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full max-w-full overflow-hidden">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Letture Contascatti - {property.name}</h2>
@@ -47,57 +47,64 @@ export function ReadingsList({ readings, property, onAddReading, onEditReading, 
           </div>
         </Card>
       ) : (
-        <div className="grid gap-4">
+        <div className="space-y-4 w-full">
           {sortedReadings.map((reading) => (
-            <Card key={reading.id} className="hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <div className="p-2 bg-energy-50 rounded-lg">
-                    <Calendar className="h-5 w-5 text-energy-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">
-                      {new Date(reading.date).toLocaleDateString('it-IT', {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                      })}
-                    </h3>
-                    <div className="flex items-center space-x-6 mt-2">
-                      {property.owners.map((owner) => (
-                        <div key={owner.id} className="flex items-center space-x-2">
-                          <div 
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: owner.color }}
-                          />
-                          <span className="text-sm text-gray-600">{owner.name}:</span>
-                          <span className="text-sm font-medium text-gray-900">
-                            {reading.readings[owner.id]?.toLocaleString() || 0} kWh
-                          </span>
-                        </div>
-                      ))}
+            <Card key={reading.id} className="hover:shadow-md transition-shadow w-full">
+              <div className="w-full">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-energy-50 rounded-lg">
+                      <Calendar className="h-5 w-5 text-energy-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">
+                        {new Date(reading.date).toLocaleDateString('it-IT', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
+                      </h3>
                     </div>
                   </div>
+                  <div className="flex items-center space-x-2 flex-shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={Edit3}
+                      onClick={() => onEditReading(reading)}
+                    >
+                      <span className="hidden sm:inline">Modifica</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={Trash2}
+                      onClick={() => setShowDeleteConfirm(reading)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <span className="hidden sm:inline">Elimina</span>
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={Edit3}
-                    onClick={() => onEditReading(reading)}
-                  >
-                    Modifica
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={Trash2}
-                    onClick={() => setShowDeleteConfirm(reading)}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                  >
-                    Elimina
-                  </Button>
+
+                {/* Readings Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 w-full">
+                  {property.owners.map((owner) => (
+                    <div key={owner.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg min-w-0">
+                      <div className="flex items-center space-x-2 min-w-0 flex-1">
+                        <div 
+                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: owner.color }}
+                        />
+                        <span className="text-sm text-gray-600 truncate">{owner.name}:</span>
+                      </div>
+                      <span className="text-sm font-medium text-gray-900 flex-shrink-0 ml-2">
+                        {reading.readings[owner.id]?.toLocaleString() || 0} kWh
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </Card>

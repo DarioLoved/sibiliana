@@ -1,7 +1,7 @@
 import React from 'react';
-import { Home, Activity, Receipt, History, X } from 'lucide-react';
+import { Home, Activity, Receipt, History, Settings, X } from 'lucide-react';
 
-export type NavigationTab = 'dashboard' | 'readings' | 'bills' | 'history';
+export type NavigationTab = 'dashboard' | 'readings' | 'bills' | 'history' | 'settings';
 
 interface NavigationProps {
   activeTab: NavigationTab;
@@ -16,6 +16,7 @@ export function Navigation({ activeTab, onTabChange, isMobileMenuOpen, onCloseMo
     { id: 'readings' as const, label: 'Letture', icon: Activity },
     { id: 'bills' as const, label: 'Bollette', icon: Receipt },
     { id: 'history' as const, label: 'Storico', icon: History },
+    { id: 'settings' as const, label: 'Impostazioni', icon: Settings },
   ];
 
   const handleTabClick = (tabId: NavigationTab) => {
@@ -95,7 +96,7 @@ export function Navigation({ activeTab, onTabChange, isMobileMenuOpen, onCloseMo
 
       {/* Mobile Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 sm:hidden">
-        <div className="grid grid-cols-4">
+        <div className="grid grid-cols-5">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -111,7 +112,7 @@ export function Navigation({ activeTab, onTabChange, isMobileMenuOpen, onCloseMo
                 }`}
               >
                 <Icon className="h-5 w-5 mb-1" />
-                <span className="text-xs font-medium">{tab.label}</span>
+                <span className="text-xs font-medium truncate">{tab.label}</span>
               </button>
             );
           })}

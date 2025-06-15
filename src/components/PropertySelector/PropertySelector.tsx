@@ -1,20 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card } from '../Common/Card';
 import { Button } from '../Common/Button';
 import { Modal } from '../Common/Modal';
 import { Input } from '../Common/Input';
-import { Home, Plus, Settings, Trash2, Users, Eye, Edit3 } from 'lucide-react';
+import { Home, Plus, Users } from 'lucide-react';
 import { Property, Owner } from '../../types';
 import { FirebaseService } from '../../services/firebaseService';
 
-interface PropertySelectorProps {
-  onPropertySelect: (property: Property) => void;
-}
-
-export function PropertySelector({ onPropertySelect }: PropertySelectorProps) {
+export function PropertySelector() {
+  const navigate = useNavigate();
   const [properties, setProperties] = useState<Property[]>([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -43,14 +40,8 @@ export function PropertySelector({ onPropertySelect }: PropertySelectorProps) {
     }
   };
 
-  const handleDeleteProperty = async (property: Property) => {
-    try {
-      await FirebaseService.deleteProperty(property.id);
-      setProperties(prev => prev.filter(p => p.id !== property.id));
-      setShowDeleteConfirm(null);
-    } catch (error) {
-      console.error('Error deleting property:', error);
-    }
+  const handlePropertySelect = (property: Property) => {
+    navigate(`/property/${property.id}`);
   };
 
   if (loading) {
@@ -74,52 +65,38 @@ export function PropertySelector({ onPropertySelect }: PropertySelectorProps) {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
           {properties.map((property) => (
-            <Card key={property.id} className="hover:shadow-lg transition-shadow">
-              <div className="p-4 sm:p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div 
-                    onClick={() => onPropertySelect(property)} 
-                    className="flex items-center space-x-3 cursor-pointer flex-1 min-w-0"
-                  >
-                    <div className="p-2 bg-primary-50 rounded-lg flex-shrink-0">
-                      <Home className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate">{property.name}</h3>
-                      <p className="text-xs sm:text-sm text-gray-600">
-                        {property.billingCycle === 'monthly' ? 'Mensile' : 'Bimestrale'}
-                      </p>
-                    </div>
+            <Card key={property.id} className="hover:shadow-lg transition-shadow cursor-pointer">
+              <div 
+                onClick={() => handlePropertySelect(property)} 
+                className="p-4 sm:p-6"
+              >
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="p-2 bg-primary-50 rounded-lg flex-shrink-0">
+                    <Home className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600" />
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={Trash2}
-                    onClick={() => setShowDeleteConfirm(property)}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0 ml-2"
-                  />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate">{property.name}</h3>
+                    <p className="text-xs sm:text-sm text-gray-600">
+                      {property.billingCycle === 'monthly' ? 'Mensile' : 'Bimestrale'}
+                    </p>
+                  </div>
                 </div>
                 
-                <div 
-                  onClick={() => onPropertySelect(property)} 
-                  className="cursor-pointer"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <Users className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400" />
-                      <p className="text-xs sm:text-sm text-gray-600">Proprietari ({property.owners.length}):</p>
-                    </div>
-                    <div className="flex flex-wrap gap-1 sm:gap-2">
-                      {property.owners.map((owner) => (
-                        <div key={owner.id} className="flex items-center space-x-1">
-                          <div 
-                            className="w-2 h-2 sm:w-3 sm:h-3 rounded-full"
-                            style={{ backgroundColor: owner.color }}
-                          />
-                          <span className="text-xs text-gray-700">{owner.name}</span>
-                        </div>
-                      ))}
-                    </div>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Users className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400" />
+                    <p className="text-xs sm:text-sm text-gray-600">Proprietari ({property.owners.length}):</p>
+                  </div>
+                  <div className="flex flex-wrap gap-1 sm:gap-2">
+                    {property.owners.map((owner) => (
+                      <div key={owner.id} className="flex items-center space-x-1">
+                        <div 
+                          className="w-2 h-2 sm:w-3 sm:h-3 rounded-full"
+                          style={{ backgroundColor: owner.color }}
+                        />
+                        <span className="text-xs text-gray-700">{owner.name}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -142,33 +119,6 @@ export function PropertySelector({ onPropertySelect }: PropertySelectorProps) {
           onClose={() => setShowCreateForm(false)}
           onSave={handleCreateProperty}
         />
-
-        {/* Delete Confirmation Modal */}
-        <Modal
-          isOpen={!!showDeleteConfirm}
-          onClose={() => setShowDeleteConfirm(null)}
-          title="Conferma Eliminazione"
-          size="sm"
-        >
-          <div className="space-y-4">
-            <p className="text-gray-700">
-              Sei sicuro di voler eliminare la proprietà "{showDeleteConfirm?.name}"? 
-              Tutti i dati associati (letture, bollette, calcoli) verranno eliminati definitivamente.
-              Questa azione non può essere annullata.
-            </p>
-            <div className="flex justify-end space-x-3">
-              <Button variant="secondary" onClick={() => setShowDeleteConfirm(null)}>
-                Annulla
-              </Button>
-              <Button 
-                variant="danger" 
-                onClick={() => showDeleteConfirm && handleDeleteProperty(showDeleteConfirm)}
-              >
-                Elimina Definitivamente
-              </Button>
-            </div>
-          </div>
-        </Modal>
       </div>
     </div>
   );
@@ -310,16 +260,16 @@ function PropertyForm({ isOpen, onClose, onSave, editingProperty }: PropertyForm
             </Button>
           </div>
           
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-60 overflow-y-auto">
             {formData.owners.map((owner, index) => (
               <div key={owner.id} className="flex items-center space-x-4 p-4 border border-gray-200 rounded-lg">
                 <input
                   type="color"
                   value={owner.color}
                   onChange={(e) => updateOwner(owner.id, 'color', e.target.value)}
-                  className="w-8 h-8 rounded border"
+                  className="w-8 h-8 rounded border flex-shrink-0"
                 />
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <Input
                     value={owner.name}
                     onChange={(e) => updateOwner(owner.id, 'name', e.target.value)}
@@ -332,11 +282,10 @@ function PropertyForm({ isOpen, onClose, onSave, editingProperty }: PropertyForm
                     type="button"
                     variant="ghost"
                     size="sm"
-                    icon={Trash2}
                     onClick={() => removeOwner(owner.id)}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
                   >
-                    Rimuovi
+                    ×
                   </Button>
                 )}
               </div>
