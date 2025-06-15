@@ -1,5 +1,5 @@
 import React from 'react';
-import { Zap, Bell, Settings, ArrowLeft, Menu } from 'lucide-react';
+import { Zap, Bell, ArrowLeft, Menu } from 'lucide-react';
 import { Button } from '../Common/Button';
 import { useNotifications } from '../../hooks/useNotifications';
 import { Property } from '../../types';
@@ -7,12 +7,11 @@ import { Property } from '../../types';
 interface HeaderProps {
   property?: Property;
   onNotificationsClick: () => void;
-  onSettingsClick?: () => void;
   onBackToProperties?: () => void;
   onMenuClick?: () => void;
 }
 
-export function Header({ property, onNotificationsClick, onSettingsClick, onBackToProperties, onMenuClick }: HeaderProps) {
+export function Header({ property, onNotificationsClick, onBackToProperties, onMenuClick }: HeaderProps) {
   const { unreadCount } = useNotifications();
 
   return (
@@ -63,26 +62,6 @@ export function Header({ property, onNotificationsClick, onSettingsClick, onBack
               />
             )}
             
-            {property && onSettingsClick && (
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={Settings}
-                onClick={onSettingsClick}
-                className="hidden sm:flex"
-              >
-                Impostazioni
-              </Button>
-            )}
-            {property && onSettingsClick && (
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={Settings}
-                onClick={onSettingsClick}
-                className="sm:hidden p-2"
-              />
-            )}
             <button
               onClick={onNotificationsClick}
               className="relative p-2 text-gray-600 hover:text-primary-600 transition-colors"

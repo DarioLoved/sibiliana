@@ -68,14 +68,14 @@ export function PropertySelector() {
             <Card key={property.id} className="hover:shadow-lg transition-shadow cursor-pointer">
               <div 
                 onClick={() => handlePropertySelect(property)} 
-                className="p-4 sm:p-6"
+                className="p-4 sm:p-6 text-center"
               >
-                <div className="flex items-center space-x-3 mb-4">
-                  <div className="p-2 bg-primary-50 rounded-lg flex-shrink-0">
+                <div className="flex flex-col items-center space-y-3 mb-4">
+                  <div className="p-2 bg-primary-50 rounded-lg">
                     <Home className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600" />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate">{property.name}</h3>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 text-sm sm:text-base">{property.name}</h3>
                     <p className="text-xs sm:text-sm text-gray-600">
                       {property.billingCycle === 'monthly' ? 'Mensile' : 'Bimestrale'}
                     </p>
@@ -83,11 +83,11 @@ export function PropertySelector() {
                 </div>
                 
                 <div className="space-y-2">
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center justify-center space-x-2">
                     <Users className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400" />
                     <p className="text-xs sm:text-sm text-gray-600">Proprietari ({property.owners.length}):</p>
                   </div>
-                  <div className="flex flex-wrap gap-1 sm:gap-2">
+                  <div className="flex flex-wrap justify-center gap-1 sm:gap-2">
                     {property.owners.map((owner) => (
                       <div key={owner.id} className="flex items-center space-x-1">
                         <div 
@@ -106,7 +106,7 @@ export function PropertySelector() {
           <Card className="border-2 border-dashed border-gray-300 hover:border-primary-400 transition-colors">
             <div 
               onClick={() => setShowCreateForm(true)}
-              className="flex flex-col items-center justify-center p-6 sm:p-8 cursor-pointer"
+              className="flex flex-col items-center justify-center p-6 sm:p-8 cursor-pointer text-center"
             >
               <Plus className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 mb-2" />
               <span className="text-gray-600 font-medium text-sm sm:text-base">Nuova Proprietà</span>
