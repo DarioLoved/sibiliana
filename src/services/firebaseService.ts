@@ -16,9 +16,22 @@ import { Property, MeterReading, Bill } from '../types';
 
 export class FirebaseService {
   // Properties
-  static async getProperties(): Promise<Property[]> {
-    const querySnapshot = await getDocs(collection(db, 'properties'));
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Property));
+  static async getProperties(userId?: string): Promise<Property[]> {
+    if (userId) {
+      // Get properties where user has access
+      const querySnapshot = await getDocs(collection(db, 'properties'));
+      const allProperties = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Property));
+      
+      return allProperties.filter(property => 
+        property.createdBy === userId ||
+        property.permissions?.admins?.includes(userId) ||
+        property.permissions?.editors?.includes(userId) ||
+        property.permissions?.viewers?.includes(userId)
+      );
+    } else {
+      const querySnapshot = await getDocs(collection(db, 'properties'));
+      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Property));
+    }
   }
 
   static async getProperty(propertyId: string): Promise<Property | null> {
@@ -26,8 +39,18 @@ export class FirebaseService {
     return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as Property : null;
   }
 
-  static async createProperty(property: Omit<Property, 'id'>): Promise<string> {
-    const docRef = await addDoc(collection(db, 'properties'), property);
+  static async createProperty(property: Omit<Property, 'id'>, createdBy: string): Promise<string> {
+    const propertyData = {
+      ...property,
+      createdBy,
+      permissions: {
+        admins: [createdBy],
+        editors: [],
+        viewers: []
+      }
+    };
+    
+    const docRef = await addDoc(collection(db, 'properties'), propertyData);
     return docRef.id;
   }
 
@@ -62,10 +85,11 @@ export class FirebaseService {
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MeterReading));
   }
 
-  static async createReading(propertyId: string, reading: Omit<MeterReading, 'id' | 'propertyId'>): Promise<string> {
+  static async createReading(propertyId: string, reading: Omit<MeterReading, 'id' | 'propertyId'>, createdBy: string): Promise<string> {
     const docRef = await addDoc(collection(db, 'properties', propertyId, 'readings'), {
       ...reading,
       propertyId,
+      createdBy,
       createdAt: new Date().toISOString()
     });
     return docRef.id;
@@ -89,10 +113,11 @@ export class FirebaseService {
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bill));
   }
 
-  static async createBill(propertyId: string, bill: Omit<Bill, 'id' | 'propertyId'>): Promise<string> {
+  static async createBill(propertyId: string, bill: Omit<Bill, 'id' | 'propertyId'>, createdBy: string): Promise<string> {
     const docRef = await addDoc(collection(db, 'properties', propertyId, 'bills'), {
       ...bill,
       propertyId,
+      createdBy,
       createdAt: new Date().toISOString()
     });
     return docRef.id;

@@ -12,11 +12,14 @@ import { BillForm } from '../Bills/BillForm';
 import { HistoryView } from '../History/HistoryView';
 import { PropertySettings } from '../PropertySettings/PropertySettings';
 import { NotificationPanel } from '../Notifications/NotificationPanel';
+import { UserManagementPanel } from '../UserManagement/UserManagementPanel';
 
 // Hooks and services
 import { useNotifications } from '../../hooks/useNotifications';
+import { useAuth } from '../../hooks/useAuth';
 import { FirebaseService } from '../../services/firebaseService';
 import { CalculationService } from '../../services/calculationService';
+import { PermissionService } from '../../services/permissionService';
 
 // Types
 import { Property, MeterReading, Bill } from '../../types';
@@ -25,11 +28,13 @@ export function PropertyDashboard() {
   const { propertyId } = useParams<{ propertyId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   
   const [property, setProperty] = useState<Property | null>(null);
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasAccess, setHasAccess] = useState(false);
   
   const [readings, setReadings] = useState<MeterReading[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
@@ -38,6 +43,7 @@ export function PropertyDashboard() {
   const [showBillForm, setShowBillForm] = useState(false);
   const [showPropertySettings, setShowPropertySettings] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showUserManagement, setShowUserManagement] = useState(false);
   
   const [editingReading, setEditingReading] = useState<MeterReading | undefined>();
   const [editingBill, setEditingBill] = useState<Bill | undefined>();
@@ -62,12 +68,14 @@ export function PropertyDashboard() {
 
   // Load property data
   useEffect(() => {
-    if (propertyId) {
+    if (propertyId && user) {
       loadProperty(propertyId);
     }
-  }, [propertyId]);
+  }, [propertyId, user]);
 
   const loadProperty = async (id: string) => {
+    if (!user) return;
+    
     setIsLoading(true);
     try {
       const propertyData = await FirebaseService.getProperty(id);
@@ -75,8 +83,23 @@ export function PropertyDashboard() {
         navigate('/', { replace: true });
         return;
       }
+
+      // Check if user has access to this property
+      const canAccess = propertyData.createdBy === user.id || 
+                       PermissionService.canUserPerformAction(propertyData, user.id, 'read');
+      
+      if (!canAccess) {
+        addNotification({ 
+          type: 'error', 
+          title: 'Accesso Negato', 
+          message: 'Non hai i permessi per accedere a questa proprietà.' 
+        });
+        navigate('/', { replace: true });
+        return;
+      }
       
       setProperty(propertyData);
+      setHasAccess(true);
       await loadPropertyData(id);
       
       addNotification({ 
@@ -161,8 +184,12 @@ export function PropertyDashboard() {
     navigate('/', { replace: true });
   };
 
+  const canWrite = user && property && PermissionService.canUserPerformAction(property, user.id, 'write');
+  const canDelete = user && property && PermissionService.canUserPerformAction(property, user.id, 'delete');
+  const canManage = user && property && PermissionService.canUserPerformAction(property, user.id, 'manage');
+
   const handleSaveReading = async (readingData: Omit<MeterReading, 'id' | 'propertyId'>) => {
-    if (!property || !propertyId) return;
+    if (!property || !propertyId || !user || !canWrite) return;
 
     try {
       if (editingReading) {
@@ -176,7 +203,7 @@ export function PropertyDashboard() {
           message: `Lettura del ${new Date(readingData.date).toLocaleDateString('it-IT')} aggiornata.` 
         });
       } else {
-        const id = await FirebaseService.createReading(propertyId, readingData);
+        const id = await FirebaseService.createReading(propertyId, readingData, user.id);
         const newReading = { id, ...readingData, propertyId };
         setReadings(prev => [newReading, ...prev]);
         addNotification({ 
@@ -198,7 +225,7 @@ export function PropertyDashboard() {
   };
 
   const handleSaveBill = async (billData: Omit<Bill, 'id' | 'propertyId'>) => {
-    if (!property || !propertyId) return;
+    if (!property || !propertyId || !user || !canWrite) return;
 
     try {
       const startReading = readings.find(r => r.id === billData.startReadingId);
@@ -234,7 +261,7 @@ export function PropertyDashboard() {
           message: `Bolletta aggiornata con successo.` 
         });
       } else {
-        const id = await FirebaseService.createBill(propertyId, billWithCalculations);
+        const id = await FirebaseService.createBill(propertyId, billWithCalculations, user.id);
         const newBill = { id, ...billWithCalculations, propertyId };
         setBills(prev => [newBill, ...prev]);
         addNotification({ 
@@ -256,7 +283,7 @@ export function PropertyDashboard() {
   };
 
   const handleDeleteReading = async (reading: MeterReading) => {
-    if (!propertyId) return;
+    if (!propertyId || !canDelete) return;
 
     try {
       await FirebaseService.deleteReading(propertyId, reading.id);
@@ -277,7 +304,7 @@ export function PropertyDashboard() {
   };
 
   const handleDeleteBill = async (bill: Bill) => {
-    if (!propertyId) return;
+    if (!propertyId || !canDelete) return;
 
     try {
       await FirebaseService.deleteBill(propertyId, bill.id);
@@ -298,16 +325,20 @@ export function PropertyDashboard() {
   };
 
   const handleEditReading = (reading: MeterReading) => {
+    if (!canWrite) return;
     setEditingReading(reading);
     setShowReadingForm(true);
   };
 
   const handleEditBill = (bill: Bill) => {
+    if (!canWrite) return;
     setEditingBill(bill);
     setShowBillForm(true);
   };
 
   const handleSavePropertySettings = async (updatedProperty: Property) => {
+    if (!canManage) return;
+    
     try {
       await FirebaseService.updateProperty(updatedProperty.id, updatedProperty);
       setProperty(updatedProperty);
@@ -328,7 +359,7 @@ export function PropertyDashboard() {
   };
 
   const handleDeleteProperty = async () => {
-    if (!property || !propertyId) return;
+    if (!property || !propertyId || !canManage) return;
 
     try {
       await FirebaseService.deleteProperty(propertyId);
@@ -356,10 +387,10 @@ export function PropertyDashboard() {
     );
   }
 
-  if (!property) {
+  if (!property || !hasAccess) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-xl font-semibold text-gray-700">Proprietà non trovata</div>
+        <div className="text-xl font-semibold text-gray-700">Proprietà non trovata o accesso negato</div>
       </div>
     );
   }
@@ -369,9 +400,9 @@ export function PropertyDashboard() {
       <Header 
         property={property}
         onNotificationsClick={() => setShowNotifications(true)}
-        onSettingsClick={() => handleTabChange('settings')}
         onBackToProperties={handleBackToProperties}
         onMenuClick={() => setIsMobileMenuOpen(true)}
+        onUserManagementClick={canManage ? () => setShowUserManagement(true) : undefined}
       />
       <Navigation 
         activeTab={activeTab} 
@@ -397,9 +428,9 @@ export function PropertyDashboard() {
               <ReadingsList 
                 readings={readings} 
                 property={property}
-                onAddReading={() => setShowReadingForm(true)} 
-                onEditReading={handleEditReading}
-                onDeleteReading={handleDeleteReading}
+                onAddReading={canWrite ? () => setShowReadingForm(true) : undefined} 
+                onEditReading={canWrite ? handleEditReading : undefined}
+                onDeleteReading={canDelete ? handleDeleteReading : undefined}
               />
             } 
           />
@@ -410,9 +441,9 @@ export function PropertyDashboard() {
                 bills={bills} 
                 property={property}
                 readings={readings}
-                onAddBill={() => setShowBillForm(true)} 
-                onEditBill={handleEditBill}
-                onDeleteBill={handleDeleteBill}
+                onAddBill={canWrite ? () => setShowBillForm(true) : undefined} 
+                onEditBill={canWrite ? handleEditBill : undefined}
+                onDeleteBill={canDelete ? handleDeleteBill : undefined}
               />
             } 
           />
@@ -431,8 +462,9 @@ export function PropertyDashboard() {
             element={
               <PropertySettings
                 property={property}
-                onSave={handleSavePropertySettings}
-                onDelete={handleDeleteProperty}
+                onSave={canManage ? handleSavePropertySettings : undefined}
+                onDelete={canManage ? handleDeleteProperty : undefined}
+                canManage={canManage}
               />
             } 
           />
@@ -440,21 +472,25 @@ export function PropertyDashboard() {
       </main>
 
       {/* Modals */}
-      <ReadingForm 
-        isOpen={showReadingForm} 
-        onClose={() => { setShowReadingForm(false); setEditingReading(undefined); }} 
-        onSave={handleSaveReading} 
-        property={property}
-        editingReading={editingReading} 
-      />
-      
-      <BillForm 
-        isOpen={showBillForm} 
-        onClose={() => { setShowBillForm(false); setEditingBill(undefined); }} 
-        onSave={handleSaveBill} 
-        editingBill={editingBill}
-        readings={readings}
-      />
+      {canWrite && (
+        <>
+          <ReadingForm 
+            isOpen={showReadingForm} 
+            onClose={() => { setShowReadingForm(false); setEditingReading(undefined); }} 
+            onSave={handleSaveReading} 
+            property={property}
+            editingReading={editingReading} 
+          />
+          
+          <BillForm 
+            isOpen={showBillForm} 
+            onClose={() => { setShowBillForm(false); setEditingBill(undefined); }} 
+            onSave={handleSaveBill} 
+            editingBill={editingBill}
+            readings={readings}
+          />
+        </>
+      )}
       
       <NotificationPanel 
         isOpen={showNotifications} 
@@ -462,6 +498,15 @@ export function PropertyDashboard() {
         notifications={notifications} 
         onMarkAsRead={markAsRead} 
       />
+
+      {canManage && (
+        <UserManagementPanel
+          isOpen={showUserManagement}
+          onClose={() => setShowUserManagement(false)}
+          property={property}
+          onPropertyUpdate={setProperty}
+        />
+      )}
     </div>
   );
 }

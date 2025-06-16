@@ -1,5 +1,5 @@
 import React from 'react';
-import { Zap, Bell, ArrowLeft, Menu } from 'lucide-react';
+import { Zap, Bell, ArrowLeft, Menu, Users } from 'lucide-react';
 import { Button } from '../Common/Button';
 import { useNotifications } from '../../hooks/useNotifications';
 import { Property } from '../../types';
@@ -9,9 +9,10 @@ interface HeaderProps {
   onNotificationsClick: () => void;
   onBackToProperties?: () => void;
   onMenuClick?: () => void;
+  onUserManagementClick?: () => void;
 }
 
-export function Header({ property, onNotificationsClick, onBackToProperties, onMenuClick }: HeaderProps) {
+export function Header({ property, onNotificationsClick, onBackToProperties, onMenuClick, onUserManagementClick }: HeaderProps) {
   const { unreadCount } = useNotifications();
 
   return (
@@ -51,6 +52,19 @@ export function Header({ property, onNotificationsClick, onBackToProperties, onM
           </div>
           
           <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
+            {/* User Management Button */}
+            {onUserManagementClick && (
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={Users}
+                onClick={onUserManagementClick}
+                className="hidden sm:flex"
+              >
+                Utenti
+              </Button>
+            )}
+            
             {/* Mobile menu button */}
             {onMenuClick && (
               <Button

@@ -4,23 +4,29 @@ import { Card } from '../Common/Card';
 import { Button } from '../Common/Button';
 import { Modal } from '../Common/Modal';
 import { Input } from '../Common/Input';
-import { Home, Plus, Users } from 'lucide-react';
+import { Home, Plus, Users, LogOut, Settings } from 'lucide-react';
 import { Property, Owner } from '../../types';
 import { FirebaseService } from '../../services/firebaseService';
+import { useAuth } from '../../hooks/useAuth';
 
 export function PropertySelector() {
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   const [properties, setProperties] = useState<Property[]>([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadProperties();
-  }, []);
+    if (user) {
+      loadProperties();
+    }
+  }, [user]);
 
   const loadProperties = async () => {
+    if (!user) return;
+    
     try {
-      const props = await FirebaseService.getProperties();
+      const props = await FirebaseService.getProperties(user.id);
       setProperties(props);
     } catch (error) {
       console.error('Error loading properties:', error);
@@ -29,10 +35,21 @@ export function PropertySelector() {
     }
   };
 
-  const handleCreateProperty = async (propertyData: Omit<Property, 'id'>) => {
+  const handleCreateProperty = async (propertyData: Omit<Property, 'id' | 'createdBy' | 'permissions'>) => {
+    if (!user) return;
+
     try {
-      const id = await FirebaseService.createProperty(propertyData);
-      const newProperty = { id, ...propertyData };
+      const id = await FirebaseService.createProperty(propertyData, user.id);
+      const newProperty = { 
+        id, 
+        ...propertyData, 
+        createdBy: user.id,
+        permissions: {
+          admins: [user.id],
+          editors: [],
+          viewers: []
+        }
+      };
       setProperties(prev => [...prev, newProperty]);
       setShowCreateForm(false);
     } catch (error) {
@@ -42,6 +59,14 @@ export function PropertySelector() {
 
   const handlePropertySelect = (property: Property) => {
     navigate(`/property/${property.id}`);
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
   };
 
   if (loading) {
@@ -55,12 +80,26 @@ export function PropertySelector() {
   return (
     <div className="min-h-screen bg-gray-50 py-6 sm:py-12 pb-20 sm:pb-12">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-8 sm:mb-12">
-          <div className="p-3 sm:p-4 bg-primary-600 rounded-full w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4">
-            <Home className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
+        {/* Header with user info */}
+        <div className="flex items-center justify-between mb-8">
+          <div className="text-center flex-1">
+            <div className="p-3 sm:p-4 bg-primary-600 rounded-full w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4">
+              <Home className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Gestione Spese Energia</h1>
+            <p className="text-gray-600 text-sm sm:text-base">Benvenuto, {user?.name}</p>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Gestione Spese Energia</h1>
-          <p className="text-gray-600 text-sm sm:text-base">Seleziona una proprietà da gestire o creane una nuova</p>
+          
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={LogOut}
+              onClick={handleSignOut}
+            >
+              <span className="hidden sm:inline">Esci</span>
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
@@ -127,7 +166,7 @@ export function PropertySelector() {
 interface PropertyFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (property: Omit<Property, 'id'>) => void;
+  onSave: (property: Omit<Property, 'id' | 'createdBy' | 'permissions'>) => void;
   editingProperty?: Property;
 }
 

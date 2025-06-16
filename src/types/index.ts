@@ -10,13 +10,14 @@ export interface Property {
   owners: Owner[];
   billingCycle: 'monthly' | 'bimonthly';
   createdAt: string;
+  createdBy: string;
   permissions?: PropertyPermissions;
 }
 
 export interface PropertyPermissions {
   admins: string[]; // User IDs with full access
-  viewers: string[]; // User IDs with read-only access
   editors: string[]; // User IDs with edit access but can't delete
+  viewers: string[]; // User IDs with read-only access
 }
 
 export interface User {
@@ -24,6 +25,21 @@ export interface User {
   email: string;
   name: string;
   role: 'admin' | 'user';
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
+export interface Invitation {
+  id: string;
+  propertyId: string;
+  userEmail: string;
+  permission: 'admin' | 'editor' | 'viewer';
+  invitedBy: string;
+  status: 'pending' | 'accepted' | 'declined' | 'expired';
+  createdAt: string;
+  expiresAt: string;
+  acceptedAt?: string;
+  acceptedBy?: string;
 }
 
 export interface MeterReading {
