@@ -1,8 +1,6 @@
 import { 
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInWithPopup,
-  GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
   User as FirebaseUser,
@@ -13,8 +11,6 @@ import { auth, db } from '../firebase';
 import { User } from '../types';
 
 export class AuthService {
-  private static googleProvider = new GoogleAuthProvider();
-
   static async signInWithEmail(email: string, password: string): Promise<User> {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     return await this.getOrCreateUserProfile(userCredential.user);
@@ -32,11 +28,6 @@ export class AuthService {
     
     await setDoc(doc(db, 'users', user.id), user);
     return user;
-  }
-
-  static async signInWithGoogle(): Promise<User> {
-    const userCredential = await signInWithPopup(auth, this.googleProvider);
-    return await this.getOrCreateUserProfile(userCredential.user);
   }
 
   static async signOut(): Promise<void> {

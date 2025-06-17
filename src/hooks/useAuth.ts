@@ -27,12 +27,6 @@ export function useAuth() {
     return user;
   };
 
-  const signInWithGoogle = async () => {
-    const user = await AuthService.signInWithGoogle();
-    setUser(user);
-    return user;
-  };
-
   const signOut = async () => {
     await AuthService.signOut();
     setUser(null);
@@ -47,7 +41,6 @@ export function useAuth() {
     loading,
     signIn,
     signUp,
-    signInWithGoogle,
     signOut,
     resetPassword,
   };
