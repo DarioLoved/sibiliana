@@ -8,11 +8,12 @@ import { Property, Owner } from '../../types';
 
 interface PropertySettingsProps {
   property: Property;
-  onSave: (property: Property) => void;
-  onDelete: () => void;
+  onSave?: (property: Property) => void;
+  onDelete?: () => void;
+  canManage?: boolean;
 }
 
-export function PropertySettings({ property, onSave, onDelete }: PropertySettingsProps) {
+export function PropertySettings({ property, onSave, onDelete, canManage = true }: PropertySettingsProps) {
   const [formData, setFormData] = useState({
     name: property.name,
     billingCycle: property.billingCycle,
@@ -28,6 +29,8 @@ export function PropertySettings({ property, onSave, onDelete }: PropertySetting
   };
 
   const handleSave = () => {
+    if (!onSave) return;
+    
     const validOwners = formData.owners.filter(owner => owner.name.trim() !== '');
     if (validOwners.length === 0) {
       alert('Devi avere almeno un proprietario');
@@ -64,7 +67,7 @@ export function PropertySettings({ property, onSave, onDelete }: PropertySetting
   };
 
   const handleDeleteProperty = () => {
-    if (deleteConfirmText === property.name) {
+    if (deleteConfirmText === property.name && onDelete) {
       onDelete();
       setShowDeleteConfirm(false);
     }
@@ -92,6 +95,7 @@ export function PropertySettings({ property, onSave, onDelete }: PropertySetting
             value={formData.name}
             onChange={(e) => handleChange('name', e.target.value)}
             placeholder="Es. Casa al Mare"
+            disabled={!canManage}
             required
           />
 
@@ -106,6 +110,7 @@ export function PropertySettings({ property, onSave, onDelete }: PropertySetting
                   value="monthly"
                   checked={formData.billingCycle === 'monthly'}
                   onChange={(e) => handleChange('billingCycle', e.target.value)}
+                  disabled={!canManage}
                   className="mr-2"
                 />
                 Mensile
@@ -116,6 +121,7 @@ export function PropertySettings({ property, onSave, onDelete }: PropertySetting
                   value="bimonthly"
                   checked={formData.billingCycle === 'bimonthly'}
                   onChange={(e) => handleChange('billingCycle', e.target.value)}
+                  disabled={!canManage}
                   className="mr-2"
                 />
                 Bimestrale
@@ -129,14 +135,16 @@ export function PropertySettings({ property, onSave, onDelete }: PropertySetting
       <Card>
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-900">Gestione Proprietari</h3>
-          <Button
-            variant="secondary"
-            size="sm"
-            icon={Plus}
-            onClick={addOwner}
-          >
-            Aggiungi Proprietario
-          </Button>
+          {canManage && (
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={Plus}
+              onClick={addOwner}
+            >
+              Aggiungi Proprietario
+            </Button>
+          )}
         </div>
         
         <div className="space-y-4 max-h-96 overflow-y-auto">
@@ -146,6 +154,7 @@ export function PropertySettings({ property, onSave, onDelete }: PropertySetting
                 type="color"
                 value={owner.color}
                 onChange={(e) => updateOwner(owner.id, 'color', e.target.value)}
+                disabled={!canManage}
                 className="w-10 h-10 rounded border flex-shrink-0"
               />
               <div className="flex-1 min-w-0">
@@ -153,10 +162,11 @@ export function PropertySettings({ property, onSave, onDelete }: PropertySetting
                   value={owner.name}
                   onChange={(e) => updateOwner(owner.id, 'name', e.target.value)}
                   placeholder="Nome proprietario"
+                  disabled={!canManage}
                   required
                 />
               </div>
-              {formData.owners.length > 1 && (
+              {canManage && formData.owners.length > 1 && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -173,7 +183,7 @@ export function PropertySettings({ property, onSave, onDelete }: PropertySetting
       </Card>
 
       {/* Save Changes */}
-      {hasChanges && (
+      {hasChanges && canManage && onSave && (
         <Card className="bg-blue-50 border-blue-200">
           <div className="flex items-center justify-between">
             <div>
@@ -192,29 +202,31 @@ export function PropertySettings({ property, onSave, onDelete }: PropertySetting
       )}
 
       {/* Danger Zone */}
-      <Card className="border-red-200 bg-red-50">
-        <div className="flex items-center space-x-3 mb-4">
-          <div className="p-2 bg-red-100 rounded-lg">
-            <AlertTriangle className="h-5 w-5 text-red-600" />
+      {canManage && onDelete && (
+        <Card className="border-red-200 bg-red-50">
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="p-2 bg-red-100 rounded-lg">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-red-900">Zona Pericolosa</h3>
           </div>
-          <h3 className="text-lg font-semibold text-red-900">Zona Pericolosa</h3>
-        </div>
-        
-        <div className="space-y-4">
-          <p className="text-red-700">
-            L'eliminazione della proprietà è un'azione irreversibile. Tutti i dati associati 
-            (letture, bollette, calcoli) verranno eliminati definitivamente.
-          </p>
           
-          <Button
-            variant="danger"
-            icon={Trash2}
-            onClick={() => setShowDeleteConfirm(true)}
-          >
-            Elimina Proprietà
-          </Button>
-        </div>
-      </Card>
+          <div className="space-y-4">
+            <p className="text-red-700">
+              L'eliminazione della proprietà è un'azione irreversibile. Tutti i dati associati 
+              (letture, bollette, calcoli) verranno eliminati definitivamente.
+            </p>
+            
+            <Button
+              variant="danger"
+              icon={Trash2}
+              onClick={() => setShowDeleteConfirm(true)}
+            >
+              Elimina Proprietà
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* Delete Confirmation Modal */}
       <Modal

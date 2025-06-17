@@ -4,102 +4,44 @@ import { Card } from '../Common/Card';
 import { Button } from '../Common/Button';
 import { Modal } from '../Common/Modal';
 import { Input } from '../Common/Input';
-import { Home, Plus, Users, LogOut, Settings } from 'lucide-react';
+import { Home, Plus, Users, Settings } from 'lucide-react';
 import { Property, Owner } from '../../types';
-import { FirebaseService } from '../../services/firebaseService';
-import { useAuth } from '../../hooks/useAuth';
+import { useLocalStorage } from '../../hooks/useLocalStorage';
 
 export function PropertySelector() {
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
-  const [properties, setProperties] = useState<Property[]>([]);
+  const [properties, setProperties] = useLocalStorage<Property[]>('casa-mare-properties', []);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (user) {
-      loadProperties();
-    }
-  }, [user]);
-
-  const loadProperties = async () => {
-    if (!user) return;
-    
-    try {
-      const props = await FirebaseService.getProperties(user.id);
-      setProperties(props);
-    } catch (error) {
-      console.error('Error loading properties:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCreateProperty = async (propertyData: Omit<Property, 'id' | 'createdBy' | 'permissions'>) => {
-    if (!user) return;
-
-    try {
-      const id = await FirebaseService.createProperty(propertyData, user.id);
-      const newProperty = { 
-        id, 
-        ...propertyData, 
-        createdBy: user.id,
-        permissions: {
-          admins: [user.id],
-          editors: [],
-          viewers: []
-        }
-      };
-      setProperties(prev => [...prev, newProperty]);
-      setShowCreateForm(false);
-    } catch (error) {
-      console.error('Error creating property:', error);
-    }
+  const handleCreateProperty = (propertyData: Omit<Property, 'id' | 'createdBy' | 'permissions'>) => {
+    const newProperty: Property = { 
+      id: Date.now().toString(),
+      ...propertyData, 
+      createdBy: 'local-user',
+      permissions: {
+        admins: ['local-user'],
+        editors: [],
+        viewers: []
+      }
+    };
+    setProperties(prev => [...prev, newProperty]);
+    setShowCreateForm(false);
   };
 
   const handlePropertySelect = (property: Property) => {
     navigate(`/property/${property.id}`);
   };
 
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-xl font-semibold text-gray-700">Caricamento proprietà...</div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 py-6 sm:py-12 pb-20 sm:pb-12">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header with user info */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="text-center flex-1">
-            <div className="p-3 sm:p-4 bg-primary-600 rounded-full w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4">
-              <Home className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Gestione Spese Energia</h1>
-            <p className="text-gray-600 text-sm sm:text-base">Benvenuto, {user?.name}</p>
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="p-3 sm:p-4 bg-primary-600 rounded-full w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4">
+            <Home className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
           </div>
-          
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={LogOut}
-              onClick={handleSignOut}
-            >
-              <span className="hidden sm:inline">Esci</span>
-            </Button>
-          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Casa Mare</h1>
+          <p className="text-gray-600 text-sm sm:text-base">Gestione Spese Energia</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">

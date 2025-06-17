@@ -12,14 +12,11 @@ import { BillForm } from '../Bills/BillForm';
 import { HistoryView } from '../History/HistoryView';
 import { PropertySettings } from '../PropertySettings/PropertySettings';
 import { NotificationPanel } from '../Notifications/NotificationPanel';
-import { UserManagementPanel } from '../UserManagement/UserManagementPanel';
 
 // Hooks and services
 import { useNotifications } from '../../hooks/useNotifications';
-import { useAuth } from '../../hooks/useAuth';
-import { FirebaseService } from '../../services/firebaseService';
+import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { CalculationService } from '../../services/calculationService';
-import { PermissionService } from '../../services/permissionService';
 
 // Types
 import { Property, MeterReading, Bill } from '../../types';
@@ -28,22 +25,18 @@ export function PropertyDashboard() {
   const { propertyId } = useParams<{ propertyId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  
+  const [properties] = useLocalStorage<Property[]>('casa-mare-properties', []);
+  const [readings, setReadings] = useLocalStorage<MeterReading[]>(`casa-mare-readings-${propertyId}`, []);
+  const [bills, setBills] = useLocalStorage<Bill[]>(`casa-mare-bills-${propertyId}`, []);
   
   const [property, setProperty] = useState<Property | null>(null);
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasAccess, setHasAccess] = useState(false);
   
-  const [readings, setReadings] = useState<MeterReading[]>([]);
-  const [bills, setBills] = useState<Bill[]>([]);
-
   const [showReadingForm, setShowReadingForm] = useState(false);
   const [showBillForm, setShowBillForm] = useState(false);
-  const [showPropertySettings, setShowPropertySettings] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showUserManagement, setShowUserManagement] = useState(false);
   
   const [editingReading, setEditingReading] = useState<MeterReading | undefined>();
   const [editingBill, setEditingBill] = useState<Bill | undefined>();
@@ -68,93 +61,15 @@ export function PropertyDashboard() {
 
   // Load property data
   useEffect(() => {
-    if (propertyId && user) {
-      loadProperty(propertyId);
-    }
-  }, [propertyId, user]);
-
-  const loadProperty = async (id: string) => {
-    if (!user) return;
-    
-    setIsLoading(true);
-    try {
-      const propertyData = await FirebaseService.getProperty(id);
-      if (!propertyData) {
+    if (propertyId) {
+      const foundProperty = properties.find(p => p.id === propertyId);
+      if (foundProperty) {
+        setProperty(foundProperty);
+      } else {
         navigate('/', { replace: true });
-        return;
       }
-
-      // Check if user has access to this property
-      const canAccess = propertyData.createdBy === user.id || 
-                       PermissionService.canUserPerformAction(propertyData, user.id, 'read');
-      
-      if (!canAccess) {
-        addNotification({ 
-          type: 'error', 
-          title: 'Accesso Negato', 
-          message: 'Non hai i permessi per accedere a questa proprietà.' 
-        });
-        navigate('/', { replace: true });
-        return;
-      }
-      
-      setProperty(propertyData);
-      setHasAccess(true);
-      await loadPropertyData(id);
-      
-      addNotification({ 
-        type: 'info', 
-        title: 'Dati Caricati', 
-        message: `Dati di ${propertyData.name} caricati con successo.` 
-      });
-    } catch (error) {
-      console.error('Error loading property:', error);
-      addNotification({ 
-        type: 'error', 
-        title: 'Errore di Caricamento', 
-        message: 'Impossibile caricare i dati della proprietà.' 
-      });
-      navigate('/', { replace: true });
-    } finally {
-      setIsLoading(false);
     }
-  };
-
-  const loadPropertyData = async (id: string) => {
-    try {
-      const [readingsData, billsData] = await Promise.all([
-        FirebaseService.getReadings(id),
-        FirebaseService.getBills(id)
-      ]);
-      
-      // Calculate bill expenses for each bill
-      const billsWithCalculations = billsData.map(bill => {
-        const startReading = readingsData.find(r => r.id === bill.startReadingId);
-        const endReading = readingsData.find(r => r.id === bill.endReadingId);
-        
-        if (startReading && endReading && property) {
-          const calculations = CalculationService.calculateBillExpenses(
-            bill, 
-            startReading, 
-            endReading, 
-            property.owners
-          );
-          return { ...bill, calculations };
-        }
-        return bill;
-      });
-      
-      setReadings(readingsData);
-      setBills(billsWithCalculations);
-    } catch (error) {
-      console.error('Error loading property data:', error);
-      addNotification({ 
-        type: 'error', 
-        title: 'Errore di Caricamento', 
-        message: 'Impossibile caricare i dati della proprietà.' 
-      });
-    }
-  };
+  }, [propertyId, properties, navigate]);
 
   const handleTabChange = (tab: NavigationTab) => {
     if (!propertyId) return;
@@ -184,213 +99,147 @@ export function PropertyDashboard() {
     navigate('/', { replace: true });
   };
 
-  const canWrite = user && property && PermissionService.canUserPerformAction(property, user.id, 'write');
-  const canDelete = user && property && PermissionService.canUserPerformAction(property, user.id, 'delete');
-  const canManage = user && property && PermissionService.canUserPerformAction(property, user.id, 'manage');
+  const handleSaveReading = (readingData: Omit<MeterReading, 'id' | 'propertyId'>) => {
+    if (!property || !propertyId) return;
 
-  const handleSaveReading = async (readingData: Omit<MeterReading, 'id' | 'propertyId'>) => {
-    if (!property || !propertyId || !user || !canWrite) return;
-
-    try {
-      if (editingReading) {
-        await FirebaseService.updateReading(propertyId, editingReading.id, readingData);
-        setReadings(prev => prev.map(r => 
-          r.id === editingReading.id ? { ...r, ...readingData } : r
-        ));
-        addNotification({ 
-          type: 'success', 
-          title: 'Lettura Aggiornata', 
-          message: `Lettura del ${new Date(readingData.date).toLocaleDateString('it-IT')} aggiornata.` 
-        });
-      } else {
-        const id = await FirebaseService.createReading(propertyId, readingData, user.id);
-        const newReading = { id, ...readingData, propertyId };
-        setReadings(prev => [newReading, ...prev]);
-        addNotification({ 
-          type: 'success', 
-          title: 'Lettura Salvata', 
-          message: `Nuova lettura del ${new Date(readingData.date).toLocaleDateString('it-IT')} salvata.` 
-        });
-      }
-      setEditingReading(undefined);
-      setShowReadingForm(false);
-    } catch (error) {
-      console.error('Error saving reading:', error);
-      addNotification({ 
-        type: 'error', 
-        title: 'Errore', 
-        message: 'Impossibile salvare la lettura.' 
-      });
-    }
-  };
-
-  const handleSaveBill = async (billData: Omit<Bill, 'id' | 'propertyId'>) => {
-    if (!property || !propertyId || !user || !canWrite) return;
-
-    try {
-      const startReading = readings.find(r => r.id === billData.startReadingId);
-      const endReading = readings.find(r => r.id === billData.endReadingId);
-      
-      if (!startReading || !endReading) {
-        addNotification({ 
-          type: 'error', 
-          title: 'Errore', 
-          message: 'Letture di riferimento non trovate.' 
-        });
-        return;
-      }
-
-      // Calculate expenses
-      const calculations = CalculationService.calculateBillExpenses(
-        { ...billData, id: '', propertyId },
-        startReading,
-        endReading,
-        property.owners
-      );
-
-      const billWithCalculations = { ...billData, calculations };
-
-      if (editingBill) {
-        await FirebaseService.updateBill(propertyId, editingBill.id, billWithCalculations);
-        setBills(prev => prev.map(b => 
-          b.id === editingBill.id ? { ...b, ...billWithCalculations } : b
-        ));
-        addNotification({ 
-          type: 'success', 
-          title: 'Bolletta Aggiornata', 
-          message: `Bolletta aggiornata con successo.` 
-        });
-      } else {
-        const id = await FirebaseService.createBill(propertyId, billWithCalculations, user.id);
-        const newBill = { id, ...billWithCalculations, propertyId };
-        setBills(prev => [newBill, ...prev]);
-        addNotification({ 
-          type: 'success', 
-          title: 'Bolletta Salvata', 
-          message: `Nuova bolletta salvata e calcoli generati.` 
-        });
-      }
-      setEditingBill(undefined);
-      setShowBillForm(false);
-    } catch (error) {
-      console.error('Error saving bill:', error);
-      addNotification({ 
-        type: 'error', 
-        title: 'Errore', 
-        message: 'Impossibile salvare la bolletta.' 
-      });
-    }
-  };
-
-  const handleDeleteReading = async (reading: MeterReading) => {
-    if (!propertyId || !canDelete) return;
-
-    try {
-      await FirebaseService.deleteReading(propertyId, reading.id);
-      setReadings(prev => prev.filter(r => r.id !== reading.id));
+    if (editingReading) {
+      setReadings(prev => prev.map(r => 
+        r.id === editingReading.id ? { ...r, ...readingData } : r
+      ));
       addNotification({ 
         type: 'success', 
-        title: 'Lettura Eliminata', 
-        message: 'Lettura eliminata con successo.' 
+        title: 'Lettura Aggiornata', 
+        message: `Lettura del ${new Date(readingData.date).toLocaleDateString('it-IT')} aggiornata.` 
       });
-    } catch (error) {
-      console.error('Error deleting reading:', error);
-      addNotification({ 
-        type: 'error', 
-        title: 'Errore', 
-        message: 'Impossibile eliminare la lettura.' 
-      });
-    }
-  };
-
-  const handleDeleteBill = async (bill: Bill) => {
-    if (!propertyId || !canDelete) return;
-
-    try {
-      await FirebaseService.deleteBill(propertyId, bill.id);
-      setBills(prev => prev.filter(b => b.id !== bill.id));
+    } else {
+      const newReading = { 
+        id: Date.now().toString(), 
+        ...readingData, 
+        propertyId 
+      };
+      setReadings(prev => [newReading, ...prev.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())]);
       addNotification({ 
         type: 'success', 
-        title: 'Bolletta Eliminata', 
-        message: 'Bolletta eliminata con successo.' 
+        title: 'Lettura Salvata', 
+        message: `Nuova lettura del ${new Date(readingData.date).toLocaleDateString('it-IT')} salvata.` 
       });
-    } catch (error) {
-      console.error('Error deleting bill:', error);
+    }
+    setEditingReading(undefined);
+    setShowReadingForm(false);
+  };
+
+  const handleSaveBill = (billData: Omit<Bill, 'id' | 'propertyId'>) => {
+    if (!property || !propertyId) return;
+
+    const startReading = readings.find(r => r.id === billData.startReadingId);
+    const endReading = readings.find(r => r.id === billData.endReadingId);
+    
+    if (!startReading || !endReading) {
       addNotification({ 
         type: 'error', 
         title: 'Errore', 
-        message: 'Impossibile eliminare la bolletta.' 
+        message: 'Letture di riferimento non trovate.' 
+      });
+      return;
+    }
+
+    // Calculate expenses
+    const calculations = CalculationService.calculateBillExpenses(
+      { ...billData, id: '', propertyId },
+      startReading,
+      endReading,
+      property.owners
+    );
+
+    const billWithCalculations = { ...billData, calculations };
+
+    if (editingBill) {
+      setBills(prev => prev.map(b => 
+        b.id === editingBill.id ? { ...b, ...billWithCalculations } : b
+      ));
+      addNotification({ 
+        type: 'success', 
+        title: 'Bolletta Aggiornata', 
+        message: `Bolletta aggiornata con successo.` 
+      });
+    } else {
+      const newBill = { 
+        id: Date.now().toString(), 
+        ...billWithCalculations, 
+        propertyId 
+      };
+      setBills(prev => [newBill, ...prev.sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime())]);
+      addNotification({ 
+        type: 'success', 
+        title: 'Bolletta Salvata', 
+        message: `Nuova bolletta salvata e calcoli generati.` 
       });
     }
+    setEditingBill(undefined);
+    setShowBillForm(false);
+  };
+
+  const handleDeleteReading = (reading: MeterReading) => {
+    setReadings(prev => prev.filter(r => r.id !== reading.id));
+    addNotification({ 
+      type: 'success', 
+      title: 'Lettura Eliminata', 
+      message: 'Lettura eliminata con successo.' 
+    });
+  };
+
+  const handleDeleteBill = (bill: Bill) => {
+    setBills(prev => prev.filter(b => b.id !== bill.id));
+    addNotification({ 
+      type: 'success', 
+      title: 'Bolletta Eliminata', 
+      message: 'Bolletta eliminata con successo.' 
+    });
   };
 
   const handleEditReading = (reading: MeterReading) => {
-    if (!canWrite) return;
     setEditingReading(reading);
     setShowReadingForm(true);
   };
 
   const handleEditBill = (bill: Bill) => {
-    if (!canWrite) return;
     setEditingBill(bill);
     setShowBillForm(true);
   };
 
-  const handleSavePropertySettings = async (updatedProperty: Property) => {
-    if (!canManage) return;
+  const handleSavePropertySettings = (updatedProperty: Property) => {
+    const [allProperties, setAllProperties] = useLocalStorage<Property[]>('casa-mare-properties', []);
+    setAllProperties(prev => prev.map(p => p.id === updatedProperty.id ? updatedProperty : p));
+    setProperty(updatedProperty);
+    addNotification({ 
+      type: 'success', 
+      title: 'Impostazioni Salvate', 
+      message: 'Impostazioni della proprietà aggiornate.' 
+    });
+  };
+
+  const handleDeleteProperty = () => {
+    if (!property || !propertyId) return;
+
+    const [allProperties, setAllProperties] = useLocalStorage<Property[]>('casa-mare-properties', []);
+    setAllProperties(prev => prev.filter(p => p.id !== propertyId));
     
-    try {
-      await FirebaseService.updateProperty(updatedProperty.id, updatedProperty);
-      setProperty(updatedProperty);
-      setShowPropertySettings(false);
-      addNotification({ 
-        type: 'success', 
-        title: 'Impostazioni Salvate', 
-        message: 'Impostazioni della proprietà aggiornate.' 
-      });
-    } catch (error) {
-      console.error('Error updating property:', error);
-      addNotification({ 
-        type: 'error', 
-        title: 'Errore', 
-        message: 'Impossibile aggiornare le impostazioni.' 
-      });
-    }
+    // Clear property data
+    localStorage.removeItem(`casa-mare-readings-${propertyId}`);
+    localStorage.removeItem(`casa-mare-bills-${propertyId}`);
+    
+    addNotification({ 
+      type: 'success', 
+      title: 'Proprietà Eliminata', 
+      message: 'Proprietà eliminata con successo.' 
+    });
+    navigate('/', { replace: true });
   };
 
-  const handleDeleteProperty = async () => {
-    if (!property || !propertyId || !canManage) return;
-
-    try {
-      await FirebaseService.deleteProperty(propertyId);
-      addNotification({ 
-        type: 'success', 
-        title: 'Proprietà Eliminata', 
-        message: 'Proprietà eliminata con successo.' 
-      });
-      navigate('/', { replace: true });
-    } catch (error) {
-      console.error('Error deleting property:', error);
-      addNotification({ 
-        type: 'error', 
-        title: 'Errore', 
-        message: 'Impossibile eliminare la proprietà.' 
-      });
-    }
-  };
-
-  if (isLoading) {
+  if (!property) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-xl font-semibold text-gray-700">Caricamento dati...</div>
-      </div>
-    );
-  }
-
-  if (!property || !hasAccess) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-xl font-semibold text-gray-700">Proprietà non trovata o accesso negato</div>
+        <div className="text-xl font-semibold text-gray-700">Proprietà non trovata</div>
       </div>
     );
   }
@@ -402,7 +251,6 @@ export function PropertyDashboard() {
         onNotificationsClick={() => setShowNotifications(true)}
         onBackToProperties={handleBackToProperties}
         onMenuClick={() => setIsMobileMenuOpen(true)}
-        onUserManagementClick={canManage ? () => setShowUserManagement(true) : undefined}
       />
       <Navigation 
         activeTab={activeTab} 
@@ -428,9 +276,9 @@ export function PropertyDashboard() {
               <ReadingsList 
                 readings={readings} 
                 property={property}
-                onAddReading={canWrite ? () => setShowReadingForm(true) : undefined} 
-                onEditReading={canWrite ? handleEditReading : undefined}
-                onDeleteReading={canDelete ? handleDeleteReading : undefined}
+                onAddReading={() => setShowReadingForm(true)} 
+                onEditReading={handleEditReading}
+                onDeleteReading={handleDeleteReading}
               />
             } 
           />
@@ -441,9 +289,9 @@ export function PropertyDashboard() {
                 bills={bills} 
                 property={property}
                 readings={readings}
-                onAddBill={canWrite ? () => setShowBillForm(true) : undefined} 
-                onEditBill={canWrite ? handleEditBill : undefined}
-                onDeleteBill={canDelete ? handleDeleteBill : undefined}
+                onAddBill={() => setShowBillForm(true)} 
+                onEditBill={handleEditBill}
+                onDeleteBill={handleDeleteBill}
               />
             } 
           />
@@ -462,9 +310,9 @@ export function PropertyDashboard() {
             element={
               <PropertySettings
                 property={property}
-                onSave={canManage ? handleSavePropertySettings : undefined}
-                onDelete={canManage ? handleDeleteProperty : undefined}
-                canManage={canManage}
+                onSave={handleSavePropertySettings}
+                onDelete={handleDeleteProperty}
+                canManage={true}
               />
             } 
           />
@@ -472,25 +320,21 @@ export function PropertyDashboard() {
       </main>
 
       {/* Modals */}
-      {canWrite && (
-        <>
-          <ReadingForm 
-            isOpen={showReadingForm} 
-            onClose={() => { setShowReadingForm(false); setEditingReading(undefined); }} 
-            onSave={handleSaveReading} 
-            property={property}
-            editingReading={editingReading} 
-          />
-          
-          <BillForm 
-            isOpen={showBillForm} 
-            onClose={() => { setShowBillForm(false); setEditingBill(undefined); }} 
-            onSave={handleSaveBill} 
-            editingBill={editingBill}
-            readings={readings}
-          />
-        </>
-      )}
+      <ReadingForm 
+        isOpen={showReadingForm} 
+        onClose={() => { setShowReadingForm(false); setEditingReading(undefined); }} 
+        onSave={handleSaveReading} 
+        property={property}
+        editingReading={editingReading} 
+      />
+      
+      <BillForm 
+        isOpen={showBillForm} 
+        onClose={() => { setShowBillForm(false); setEditingBill(undefined); }} 
+        onSave={handleSaveBill} 
+        editingBill={editingBill}
+        readings={readings}
+      />
       
       <NotificationPanel 
         isOpen={showNotifications} 
@@ -498,15 +342,6 @@ export function PropertyDashboard() {
         notifications={notifications} 
         onMarkAsRead={markAsRead} 
       />
-
-      {canManage && (
-        <UserManagementPanel
-          isOpen={showUserManagement}
-          onClose={() => setShowUserManagement(false)}
-          property={property}
-          onPropertyUpdate={setProperty}
-        />
-      )}
     </div>
   );
 }
