@@ -15,22 +15,23 @@ import { NotificationPanel } from '../Notifications/NotificationPanel';
 
 // Hooks and services
 import { useNotifications } from '../../hooks/useNotifications';
-import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { CalculationService } from '../../services/calculationService';
+import { FirebaseService } from '../../services/firebaseService';
 
 // Types
 import { Property, MeterReading, Bill } from '../../types';
+import { Loader2 } from 'lucide-react';
 
 export function PropertyDashboard() {
   const { propertyId } = useParams<{ propertyId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   
-  const [properties] = useLocalStorage<Property[]>('casa-mare-properties', []);
-  const [readings, setReadings] = useLocalStorage<MeterReading[]>(`casa-mare-readings-${propertyId}`, []);
-  const [bills, setBills] = useLocalStorage<Bill[]>(`casa-mare-bills-${propertyId}`, []);
-  
   const [property, setProperty] = useState<Property | null>(null);
+  const [readings, setReadings] = useState<MeterReading[]>([]);
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [loading, setLoading] = useState(true);
+  
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
@@ -61,15 +62,64 @@ export function PropertyDashboard() {
 
   // Load property data
   useEffect(() => {
-    if (propertyId) {
-      const foundProperty = properties.find(p => p.id === propertyId);
-      if (foundProperty) {
-        setProperty(foundProperty);
+    if (!propertyId) return;
+
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        
+        // Load initial data
+        const [propertyData, readingsData, billsData] = await Promise.all([
+          FirebaseService.getProperties().then(props => props.find(p => p.id === propertyId)),
+          FirebaseService.getReadings(propertyId),
+          FirebaseService.getBills(propertyId)
+        ]);
+
+        if (!propertyData) {
+          navigate('/', { replace: true });
+          return;
+        }
+
+        setProperty(propertyData);
+        setReadings(readingsData);
+        setBills(billsData);
+      } catch (error) {
+        console.error('Error loading data:', error);
+        addNotification({
+          type: 'error',
+          title: 'Errore di Caricamento',
+          message: 'Errore nel caricamento dei dati. Riprova.'
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+
+    // Subscribe to real-time updates
+    const unsubscribeProperty = FirebaseService.subscribeToProperty(propertyId, (propertyData) => {
+      if (propertyData) {
+        setProperty(propertyData);
       } else {
         navigate('/', { replace: true });
       }
-    }
-  }, [propertyId, properties, navigate]);
+    });
+
+    const unsubscribeReadings = FirebaseService.subscribeToReadings(propertyId, (readingsData) => {
+      setReadings(readingsData);
+    });
+
+    const unsubscribeBills = FirebaseService.subscribeToBills(propertyId, (billsData) => {
+      setBills(billsData);
+    });
+
+    return () => {
+      unsubscribeProperty();
+      unsubscribeReadings();
+      unsubscribeBills();
+    };
+  }, [propertyId, navigate, addNotification]);
 
   const handleTabChange = (tab: NavigationTab) => {
     if (!propertyId) return;
@@ -99,36 +149,38 @@ export function PropertyDashboard() {
     navigate('/', { replace: true });
   };
 
-  const handleSaveReading = (readingData: Omit<MeterReading, 'id' | 'propertyId'>) => {
+  const handleSaveReading = async (readingData: Omit<MeterReading, 'id' | 'propertyId'>) => {
     if (!property || !propertyId) return;
 
-    if (editingReading) {
-      setReadings(prev => prev.map(r => 
-        r.id === editingReading.id ? { ...r, ...readingData } : r
-      ));
+    try {
+      if (editingReading) {
+        await FirebaseService.updateReading(editingReading.id, readingData);
+        addNotification({ 
+          type: 'success', 
+          title: 'Lettura Aggiornata', 
+          message: `Lettura del ${new Date(readingData.date).toLocaleDateString('it-IT')} aggiornata.` 
+        });
+      } else {
+        await FirebaseService.addReading({ ...readingData, propertyId });
+        addNotification({ 
+          type: 'success', 
+          title: 'Lettura Salvata', 
+          message: `Nuova lettura del ${new Date(readingData.date).toLocaleDateString('it-IT')} salvata.` 
+        });
+      }
+      setEditingReading(undefined);
+      setShowReadingForm(false);
+    } catch (error) {
+      console.error('Error saving reading:', error);
       addNotification({ 
-        type: 'success', 
-        title: 'Lettura Aggiornata', 
-        message: `Lettura del ${new Date(readingData.date).toLocaleDateString('it-IT')} aggiornata.` 
-      });
-    } else {
-      const newReading = { 
-        id: Date.now().toString(), 
-        ...readingData, 
-        propertyId 
-      };
-      setReadings(prev => [newReading, ...prev.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())]);
-      addNotification({ 
-        type: 'success', 
-        title: 'Lettura Salvata', 
-        message: `Nuova lettura del ${new Date(readingData.date).toLocaleDateString('it-IT')} salvata.` 
+        type: 'error', 
+        title: 'Errore', 
+        message: 'Errore nel salvataggio della lettura.' 
       });
     }
-    setEditingReading(undefined);
-    setShowReadingForm(false);
   };
 
-  const handleSaveBill = (billData: Omit<Bill, 'id' | 'propertyId'>) => {
+  const handleSaveBill = async (billData: Omit<Bill, 'id' | 'propertyId'>) => {
     if (!property || !propertyId) return;
 
     const startReading = readings.find(r => r.id === billData.startReadingId);
@@ -143,58 +195,78 @@ export function PropertyDashboard() {
       return;
     }
 
-    // Calculate expenses
-    const calculations = CalculationService.calculateBillExpenses(
-      { ...billData, id: '', propertyId },
-      startReading,
-      endReading,
-      property.owners
-    );
+    try {
+      // Calculate expenses
+      const calculations = CalculationService.calculateBillExpenses(
+        { ...billData, id: '', propertyId },
+        startReading,
+        endReading,
+        property.owners
+      );
 
-    const billWithCalculations = { ...billData, calculations };
+      const billWithCalculations = { ...billData, calculations };
 
-    if (editingBill) {
-      setBills(prev => prev.map(b => 
-        b.id === editingBill.id ? { ...b, ...billWithCalculations } : b
-      ));
+      if (editingBill) {
+        await FirebaseService.updateBill(editingBill.id, billWithCalculations);
+        addNotification({ 
+          type: 'success', 
+          title: 'Bolletta Aggiornata', 
+          message: `Bolletta aggiornata con successo.` 
+        });
+      } else {
+        await FirebaseService.addBill({ ...billWithCalculations, propertyId });
+        addNotification({ 
+          type: 'success', 
+          title: 'Bolletta Salvata', 
+          message: `Nuova bolletta salvata e calcoli generati.` 
+        });
+      }
+      setEditingBill(undefined);
+      setShowBillForm(false);
+    } catch (error) {
+      console.error('Error saving bill:', error);
       addNotification({ 
-        type: 'success', 
-        title: 'Bolletta Aggiornata', 
-        message: `Bolletta aggiornata con successo.` 
-      });
-    } else {
-      const newBill = { 
-        id: Date.now().toString(), 
-        ...billWithCalculations, 
-        propertyId 
-      };
-      setBills(prev => [newBill, ...prev.sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime())]);
-      addNotification({ 
-        type: 'success', 
-        title: 'Bolletta Salvata', 
-        message: `Nuova bolletta salvata e calcoli generati.` 
+        type: 'error', 
+        title: 'Errore', 
+        message: 'Errore nel salvataggio della bolletta.' 
       });
     }
-    setEditingBill(undefined);
-    setShowBillForm(false);
   };
 
-  const handleDeleteReading = (reading: MeterReading) => {
-    setReadings(prev => prev.filter(r => r.id !== reading.id));
-    addNotification({ 
-      type: 'success', 
-      title: 'Lettura Eliminata', 
-      message: 'Lettura eliminata con successo.' 
-    });
+  const handleDeleteReading = async (reading: MeterReading) => {
+    try {
+      await FirebaseService.deleteReading(reading.id);
+      addNotification({ 
+        type: 'success', 
+        title: 'Lettura Eliminata', 
+        message: 'Lettura eliminata con successo.' 
+      });
+    } catch (error) {
+      console.error('Error deleting reading:', error);
+      addNotification({ 
+        type: 'error', 
+        title: 'Errore', 
+        message: 'Errore nell\'eliminazione della lettura.' 
+      });
+    }
   };
 
-  const handleDeleteBill = (bill: Bill) => {
-    setBills(prev => prev.filter(b => b.id !== bill.id));
-    addNotification({ 
-      type: 'success', 
-      title: 'Bolletta Eliminata', 
-      message: 'Bolletta eliminata con successo.' 
-    });
+  const handleDeleteBill = async (bill: Bill) => {
+    try {
+      await FirebaseService.deleteBill(bill.id);
+      addNotification({ 
+        type: 'success', 
+        title: 'Bolletta Eliminata', 
+        message: 'Bolletta eliminata con successo.' 
+      });
+    } catch (error) {
+      console.error('Error deleting bill:', error);
+      addNotification({ 
+        type: 'error', 
+        title: 'Errore', 
+        message: 'Errore nell\'eliminazione della bolletta.' 
+      });
+    }
   };
 
   const handleEditReading = (reading: MeterReading) => {
@@ -207,34 +279,55 @@ export function PropertyDashboard() {
     setShowBillForm(true);
   };
 
-  const handleSavePropertySettings = (updatedProperty: Property) => {
-    const [allProperties, setAllProperties] = useLocalStorage<Property[]>('casa-mare-properties', []);
-    setAllProperties(prev => prev.map(p => p.id === updatedProperty.id ? updatedProperty : p));
-    setProperty(updatedProperty);
-    addNotification({ 
-      type: 'success', 
-      title: 'Impostazioni Salvate', 
-      message: 'Impostazioni della proprietà aggiornate.' 
-    });
+  const handleSavePropertySettings = async (updatedProperty: Property) => {
+    try {
+      await FirebaseService.updateProperty(updatedProperty.id, updatedProperty);
+      addNotification({ 
+        type: 'success', 
+        title: 'Impostazioni Salvate', 
+        message: 'Impostazioni della proprietà aggiornate.' 
+      });
+    } catch (error) {
+      console.error('Error updating property:', error);
+      addNotification({ 
+        type: 'error', 
+        title: 'Errore', 
+        message: 'Errore nell\'aggiornamento delle impostazioni.' 
+      });
+    }
   };
 
-  const handleDeleteProperty = () => {
+  const handleDeleteProperty = async () => {
     if (!property || !propertyId) return;
 
-    const [allProperties, setAllProperties] = useLocalStorage<Property[]>('casa-mare-properties', []);
-    setAllProperties(prev => prev.filter(p => p.id !== propertyId));
-    
-    // Clear property data
-    localStorage.removeItem(`casa-mare-readings-${propertyId}`);
-    localStorage.removeItem(`casa-mare-bills-${propertyId}`);
-    
-    addNotification({ 
-      type: 'success', 
-      title: 'Proprietà Eliminata', 
-      message: 'Proprietà eliminata con successo.' 
-    });
-    navigate('/', { replace: true });
+    try {
+      await FirebaseService.deleteProperty(propertyId);
+      addNotification({ 
+        type: 'success', 
+        title: 'Proprietà Eliminata', 
+        message: 'Proprietà eliminata con successo.' 
+      });
+      navigate('/', { replace: true });
+    } catch (error) {
+      console.error('Error deleting property:', error);
+      addNotification({ 
+        type: 'error', 
+        title: 'Errore', 
+        message: 'Errore nell\'eliminazione della proprietà.' 
+      });
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary-600 mx-auto mb-4" />
+          <div className="text-xl font-semibold text-gray-700">Caricamento dati...</div>
+        </div>
+      </div>
+    );
+  }
 
   if (!property) {
     return (

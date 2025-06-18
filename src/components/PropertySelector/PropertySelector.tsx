@@ -4,33 +4,65 @@ import { Card } from '../Common/Card';
 import { Button } from '../Common/Button';
 import { Modal } from '../Common/Modal';
 import { Input } from '../Common/Input';
-import { Home, Plus, Users, Settings } from 'lucide-react';
+import { Home, Plus, Users, Settings, Loader2 } from 'lucide-react';
 import { Property, Owner } from '../../types';
-import { useLocalStorage } from '../../hooks/useLocalStorage';
+import { FirebaseService } from '../../services/firebaseService';
 
 export function PropertySelector() {
   const navigate = useNavigate();
-  const [properties, setProperties] = useLocalStorage<Property[]>('casa-mare-properties', []);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
-  const handleCreateProperty = (propertyData: Omit<Property, 'id' | 'createdBy' | 'permissions'>) => {
-    const newProperty: Property = { 
-      id: Date.now().toString(),
-      ...propertyData, 
-      createdBy: 'local-user',
-      permissions: {
-        admins: ['local-user'],
-        editors: [],
-        viewers: []
+  useEffect(() => {
+    const loadProperties = async () => {
+      try {
+        const propertiesData = await FirebaseService.getProperties();
+        setProperties(propertiesData);
+      } catch (error) {
+        console.error('Error loading properties:', error);
+      } finally {
+        setLoading(false);
       }
     };
-    setProperties(prev => [...prev, newProperty]);
-    setShowCreateForm(false);
+
+    loadProperties();
+
+    // Subscribe to real-time updates
+    const unsubscribe = FirebaseService.subscribeToProperties((propertiesData) => {
+      setProperties(propertiesData);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleCreateProperty = async (propertyData: Omit<Property, 'id' | 'createdBy' | 'permissions'>) => {
+    try {
+      await FirebaseService.addProperty({
+        ...propertyData,
+        createdAt: new Date().toISOString()
+      });
+      setShowCreateForm(false);
+    } catch (error) {
+      console.error('Error creating property:', error);
+      alert('Errore durante la creazione della proprietà');
+    }
   };
 
   const handlePropertySelect = (property: Property) => {
     navigate(`/property/${property.id}`);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary-600 mx-auto mb-4" />
+          <p className="text-gray-600">Caricamento proprietà...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-6 sm:py-12 pb-20 sm:pb-12">
