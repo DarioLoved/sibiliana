@@ -25,6 +25,7 @@ const firebaseConfig = {
   appId: "1:123456789012:web:abcdefghijklmnopqrstuvwxyz"
 };
 
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
@@ -220,6 +221,8 @@ export class FirebaseService {
         ...doc.data()
       })) as Property[];
       callback(properties);
+    }, (error) => {
+      console.error('Error in properties subscription:', error);
     });
   }
 
@@ -236,6 +239,8 @@ export class FirebaseService {
         ...doc.data()
       })) as MeterReading[];
       callback(readings);
+    }, (error) => {
+      console.error('Error in readings subscription:', error);
     });
   }
 
@@ -247,6 +252,8 @@ export class FirebaseService {
       } else {
         callback(null);
       }
+    }, (error) => {
+      console.error('Error in property subscription:', error);
     });
   }
 
@@ -263,6 +270,21 @@ export class FirebaseService {
         ...doc.data()
       })) as Bill[];
       callback(bills);
+    }, (error) => {
+      console.error('Error in bills subscription:', error);
     });
+  }
+
+  // Test connection
+  static async testConnection(): Promise<boolean> {
+    try {
+      const testRef = collection(db, 'test');
+      await getDocs(testRef);
+      console.log('Firebase connection successful');
+      return true;
+    } catch (error) {
+      console.error('Firebase connection failed:', error);
+      return false;
+    }
   }
 }

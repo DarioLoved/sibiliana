@@ -4,7 +4,7 @@ import { Card } from '../Common/Card';
 import { Button } from '../Common/Button';
 import { Modal } from '../Common/Modal';
 import { Input } from '../Common/Input';
-import { Home, Plus, Users, Settings, Loader2 } from 'lucide-react';
+import { Home, Plus, Users, Settings, Loader2, AlertCircle } from 'lucide-react';
 import { Property, Owner } from '../../types';
 import { FirebaseService } from '../../services/firebaseService';
 
@@ -13,14 +13,28 @@ export function PropertySelector() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [connectionError, setConnectionError] = useState(false);
 
   useEffect(() => {
     const loadProperties = async () => {
       try {
+        setLoading(true);
+        setConnectionError(false);
+        
+        // Test Firebase connection first
+        const isConnected = await FirebaseService.testConnection();
+        if (!isConnected) {
+          setConnectionError(true);
+          setLoading(false);
+          return;
+        }
+
         const propertiesData = await FirebaseService.getProperties();
+        console.log('Loaded properties:', propertiesData);
         setProperties(propertiesData);
       } catch (error) {
         console.error('Error loading properties:', error);
+        setConnectionError(true);
       } finally {
         setLoading(false);
       }
@@ -30,7 +44,9 @@ export function PropertySelector() {
 
     // Subscribe to real-time updates
     const unsubscribe = FirebaseService.subscribeToProperties((propertiesData) => {
+      console.log('Real-time update - properties:', propertiesData);
       setProperties(propertiesData);
+      setConnectionError(false);
     });
 
     return () => unsubscribe();
@@ -38,14 +54,16 @@ export function PropertySelector() {
 
   const handleCreateProperty = async (propertyData: Omit<Property, 'id' | 'createdBy' | 'permissions'>) => {
     try {
-      await FirebaseService.addProperty({
+      console.log('Creating property:', propertyData);
+      const propertyId = await FirebaseService.addProperty({
         ...propertyData,
         createdAt: new Date().toISOString()
       });
+      console.log('Property created with ID:', propertyId);
       setShowCreateForm(false);
     } catch (error) {
       console.error('Error creating property:', error);
-      alert('Errore durante la creazione della proprietà');
+      alert('Errore durante la creazione della proprietà. Controlla la connessione internet.');
     }
   };
 
@@ -59,6 +77,24 @@ export function PropertySelector() {
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600 mx-auto mb-4" />
           <p className="text-gray-600">Caricamento proprietà...</p>
+          <p className="text-sm text-gray-500 mt-2">Connessione a Firebase...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (connectionError) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Errore di Connessione</h2>
+          <p className="text-gray-600 mb-4">
+            Non riesco a connettermi al database. Controlla la tua connessione internet e riprova.
+          </p>
+          <Button onClick={() => window.location.reload()}>
+            Riprova
+          </Button>
         </div>
       </div>
     );
@@ -74,6 +110,9 @@ export function PropertySelector() {
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Casa Mare</h1>
           <p className="text-gray-600 text-sm sm:text-base">Gestione Spese Energia</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Sincronizzazione attiva • {properties.length} {properties.length === 1 ? 'proprietà' : 'proprietà'}
+          </p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
