@@ -4,7 +4,7 @@ import { Card } from '../Common/Card';
 import { Button } from '../Common/Button';
 import { Modal } from '../Common/Modal';
 import { Input } from '../Common/Input';
-import { Home, Plus, Users, Settings, Loader2, AlertCircle } from 'lucide-react';
+import { Home, Plus, Users, Settings, Loader2, AlertCircle, Wifi, WifiOff } from 'lucide-react';
 import { Property, Owner } from '../../types';
 import { FirebaseService } from '../../services/firebaseService';
 
@@ -14,6 +14,7 @@ export function PropertySelector() {
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [connectionError, setConnectionError] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
     const loadProperties = async () => {
@@ -21,20 +22,28 @@ export function PropertySelector() {
         setLoading(true);
         setConnectionError(false);
         
+        console.log('🚀 Starting Firebase connection test...');
+        
         // Test Firebase connection first
         const isConnected = await FirebaseService.testConnection();
+        setIsConnected(isConnected);
+        
         if (!isConnected) {
+          console.log('❌ Firebase connection failed');
           setConnectionError(true);
           setLoading(false);
           return;
         }
 
+        console.log('✅ Firebase connected, loading properties...');
         const propertiesData = await FirebaseService.getProperties();
-        console.log('Loaded properties:', propertiesData);
+        console.log('📊 Properties loaded:', propertiesData);
         setProperties(propertiesData);
+        
       } catch (error) {
-        console.error('Error loading properties:', error);
+        console.error('💥 Error loading properties:', error);
         setConnectionError(true);
+        setIsConnected(false);
       } finally {
         setLoading(false);
       }
@@ -43,31 +52,37 @@ export function PropertySelector() {
     loadProperties();
 
     // Subscribe to real-time updates
+    console.log('🔄 Setting up real-time subscription...');
     const unsubscribe = FirebaseService.subscribeToProperties((propertiesData) => {
-      console.log('Real-time update - properties:', propertiesData);
+      console.log('📡 Real-time update received:', propertiesData);
       setProperties(propertiesData);
       setConnectionError(false);
+      setIsConnected(true);
     });
 
-    return () => unsubscribe();
+    return () => {
+      console.log('🔌 Cleaning up subscription');
+      unsubscribe();
+    };
   }, []);
 
   const handleCreateProperty = async (propertyData: Omit<Property, 'id' | 'createdBy' | 'permissions'>) => {
     try {
-      console.log('Creating property:', propertyData);
+      console.log('🏠 Creating new property:', propertyData.name);
       const propertyId = await FirebaseService.addProperty({
         ...propertyData,
         createdAt: new Date().toISOString()
       });
-      console.log('Property created with ID:', propertyId);
+      console.log('✅ Property created successfully with ID:', propertyId);
       setShowCreateForm(false);
     } catch (error) {
-      console.error('Error creating property:', error);
-      alert('Errore durante la creazione della proprietà. Controlla la connessione internet.');
+      console.error('💥 Error creating property:', error);
+      alert('Errore durante la creazione della proprietà. Controlla la connessione internet e riprova.');
     }
   };
 
   const handlePropertySelect = (property: Property) => {
+    console.log('🏠 Selecting property:', property.name);
     navigate(`/property/${property.id}`);
   };
 
@@ -76,8 +91,13 @@ export function PropertySelector() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600 mx-auto mb-4" />
-          <p className="text-gray-600">Caricamento proprietà...</p>
-          <p className="text-sm text-gray-500 mt-2">Connessione a Firebase...</p>
+          <p className="text-gray-600 font-medium">Caricamento proprietà...</p>
+          <p className="text-sm text-gray-500 mt-2">Connessione a Firebase in corso...</p>
+          <div className="mt-4 flex items-center justify-center space-x-2">
+            <div className="w-2 h-2 bg-primary-600 rounded-full animate-pulse"></div>
+            <div className="w-2 h-2 bg-primary-600 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+            <div className="w-2 h-2 bg-primary-600 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+          </div>
         </div>
       </div>
     );
@@ -87,14 +107,23 @@ export function PropertySelector() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center max-w-md mx-auto p-6">
-          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Errore di Connessione</h2>
-          <p className="text-gray-600 mb-4">
-            Non riesco a connettermi al database. Controlla la tua connessione internet e riprova.
+          <div className="mb-4">
+            <WifiOff className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Errore di Connessione</h2>
+          <p className="text-gray-600 mb-6">
+            Non riesco a connettermi al database Firebase. 
+            <br />
+            Controlla la tua connessione internet e riprova.
           </p>
-          <Button onClick={() => window.location.reload()}>
-            Riprova
-          </Button>
+          <div className="space-y-3">
+            <Button onClick={() => window.location.reload()} className="w-full">
+              🔄 Riprova Connessione
+            </Button>
+            <p className="text-xs text-gray-500">
+              Se il problema persiste, potrebbe essere un problema di configurazione Firebase
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -110,9 +139,23 @@ export function PropertySelector() {
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Casa Mare</h1>
           <p className="text-gray-600 text-sm sm:text-base">Gestione Spese Energia</p>
-          <p className="text-xs text-gray-500 mt-1">
-            Sincronizzazione attiva • {properties.length} {properties.length === 1 ? 'proprietà' : 'proprietà'}
-          </p>
+          
+          {/* Connection Status */}
+          <div className="mt-3 flex items-center justify-center space-x-2">
+            {isConnected ? (
+              <>
+                <Wifi className="h-4 w-4 text-green-500" />
+                <span className="text-xs text-green-600 font-medium">
+                  Sincronizzazione attiva • {properties.length} {properties.length === 1 ? 'proprietà' : 'proprietà'}
+                </span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="h-4 w-4 text-red-500" />
+                <span className="text-xs text-red-600 font-medium">Connessione non disponibile</span>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
@@ -166,6 +209,16 @@ export function PropertySelector() {
           </Card>
         </div>
 
+        {/* Debug Info */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-8 p-4 bg-gray-100 rounded-lg text-xs text-gray-600">
+            <p><strong>Debug Info:</strong></p>
+            <p>Firebase Connected: {isConnected ? '✅' : '❌'}</p>
+            <p>Properties Count: {properties.length}</p>
+            <p>Connection Error: {connectionError ? '❌' : '✅'}</p>
+          </div>
+        )}
+
         <PropertyForm
           isOpen={showCreateForm}
           onClose={() => setShowCreateForm(false)}
@@ -217,6 +270,8 @@ function PropertyForm({ isOpen, onClose, onSave, editingProperty }: PropertyForm
       alert('Devi aggiungere almeno un proprietario');
       return;
     }
+
+    console.log('📝 Submitting property form:', formData);
 
     onSave({
       ...formData,
