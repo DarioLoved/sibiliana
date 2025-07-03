@@ -20,7 +20,8 @@ import { FirebaseService } from '../../services/firebaseService';
 
 // Types
 import { Property, MeterReading, Bill } from '../../types';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle, WifiOff } from 'lucide-react';
+import { Button } from '../Common/Button';
 
 export function PropertyDashboard() {
   const { propertyId } = useParams<{ propertyId: string }>();
@@ -31,6 +32,7 @@ export function PropertyDashboard() {
   const [readings, setReadings] = useState<MeterReading[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -62,29 +64,52 @@ export function PropertyDashboard() {
 
   // Load property data
   useEffect(() => {
-    if (!propertyId) return;
+    if (!propertyId) {
+      console.log('❌ No propertyId provided');
+      navigate('/', { replace: true });
+      return;
+    }
+
+    console.log('🚀 PropertyDashboard: Starting data load for property:', propertyId);
 
     const loadData = async () => {
       try {
         setLoading(true);
+        setError(null);
         
+        console.log('🔍 Testing Firebase connection...');
+        const isConnected = await FirebaseService.testConnection();
+        
+        if (!isConnected) {
+          throw new Error('Firebase connection failed');
+        }
+        
+        console.log('📊 Loading initial data...');
         // Load initial data
         const [propertyData, readingsData, billsData] = await Promise.all([
-          FirebaseService.getProperties().then(props => props.find(p => p.id === propertyId)),
+          FirebaseService.getProperties().then(props => {
+            const found = props.find(p => p.id === propertyId);
+            console.log('🏠 Property found:', found ? found.name : 'NOT FOUND');
+            return found;
+          }),
           FirebaseService.getReadings(propertyId),
           FirebaseService.getBills(propertyId)
         ]);
 
         if (!propertyData) {
+          console.log('❌ Property not found, redirecting to home');
           navigate('/', { replace: true });
           return;
         }
 
+        console.log('✅ Initial data loaded successfully');
         setProperty(propertyData);
         setReadings(readingsData);
         setBills(billsData);
+        
       } catch (error) {
-        console.error('Error loading data:', error);
+        console.error('💥 Error loading data:', error);
+        setError(error instanceof Error ? error.message : 'Errore di caricamento');
         addNotification({
           type: 'error',
           title: 'Errore di Caricamento',
@@ -98,23 +123,31 @@ export function PropertyDashboard() {
     loadData();
 
     // Subscribe to real-time updates
+    console.log('🔄 Setting up real-time subscriptions...');
+    
     const unsubscribeProperty = FirebaseService.subscribeToProperty(propertyId, (propertyData) => {
+      console.log('📡 Property update received:', propertyData ? propertyData.name : 'NULL');
       if (propertyData) {
         setProperty(propertyData);
+        setError(null);
       } else {
+        console.log('❌ Property subscription returned null, redirecting');
         navigate('/', { replace: true });
       }
     });
 
     const unsubscribeReadings = FirebaseService.subscribeToReadings(propertyId, (readingsData) => {
+      console.log('📡 Readings update received:', readingsData.length, 'readings');
       setReadings(readingsData);
     });
 
     const unsubscribeBills = FirebaseService.subscribeToBills(propertyId, (billsData) => {
+      console.log('📡 Bills update received:', billsData.length, 'bills');
       setBills(billsData);
     });
 
     return () => {
+      console.log('🔌 Cleaning up subscriptions for property:', propertyId);
       unsubscribeProperty();
       unsubscribeReadings();
       unsubscribeBills();
@@ -323,7 +356,39 @@ export function PropertyDashboard() {
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600 mx-auto mb-4" />
-          <div className="text-xl font-semibold text-gray-700">Caricamento dati...</div>
+          <div className="text-xl font-semibold text-gray-700 mb-2">Caricamento dati...</div>
+          <div className="text-sm text-gray-500">Connessione a Firebase in corso...</div>
+          <div className="mt-4 flex items-center justify-center space-x-2">
+            <div className="w-2 h-2 bg-primary-600 rounded-full animate-pulse"></div>
+            <div className="w-2 h-2 bg-primary-600 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+            <div className="w-2 h-2 bg-primary-600 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="mb-4">
+            <WifiOff className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Errore di Connessione</h2>
+          <p className="text-gray-600 mb-6">
+            {error}
+            <br />
+            Controlla la tua connessione internet e riprova.
+          </p>
+          <div className="space-y-3">
+            <Button onClick={() => window.location.reload()} className="w-full">
+              🔄 Riprova Connessione
+            </Button>
+            <Button onClick={handleBackToProperties} variant="secondary" className="w-full">
+              ← Torna alle Proprietà
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -332,7 +397,16 @@ export function PropertyDashboard() {
   if (!property) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-xl font-semibold text-gray-700">Proprietà non trovata</div>
+        <div className="text-center max-w-md mx-auto p-6">
+          <AlertCircle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Proprietà non trovata</h2>
+          <p className="text-gray-600 mb-6">
+            La proprietà richiesta non esiste o non è più disponibile.
+          </p>
+          <Button onClick={handleBackToProperties} className="w-full">
+            ← Torna alle Proprietà
+          </Button>
+        </div>
       </div>
     );
   }

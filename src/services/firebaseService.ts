@@ -12,7 +12,8 @@ import {
   query,
   where,
   orderBy,
-  Timestamp
+  Timestamp,
+  connectFirestoreEmulator
 } from 'firebase/firestore';
 import { Property, MeterReading, Bill } from '../types';
 
@@ -34,48 +35,71 @@ const db = getFirestore(app);
 const ANONYMOUS_USER_ID = 'anonymous-user';
 
 export class FirebaseService {
+  // Test Firebase connection
+  static async testConnection(): Promise<boolean> {
+    try {
+      console.log('🔍 Testing Firebase connection...');
+      const testRef = collection(db, 'test');
+      await getDocs(testRef);
+      console.log('✅ Firebase connection successful');
+      return true;
+    } catch (error) {
+      console.error('❌ Firebase connection failed:', error);
+      return false;
+    }
+  }
+
   // Properties
   static async getProperties(): Promise<Property[]> {
     try {
+      console.log('📊 Fetching properties...');
       const propertiesRef = collection(db, 'properties');
       const snapshot = await getDocs(propertiesRef);
-      return snapshot.docs.map(doc => ({
+      const properties = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Property[];
+      console.log(`✅ Fetched ${properties.length} properties`);
+      return properties;
     } catch (error) {
-      console.error('Error getting properties:', error);
+      console.error('❌ Error getting properties:', error);
       return [];
     }
   }
 
   static async addProperty(property: Omit<Property, 'id'>): Promise<string> {
     try {
+      console.log('🏠 Adding property:', property.name);
       const propertiesRef = collection(db, 'properties');
       const docRef = await addDoc(propertiesRef, {
         ...property,
         createdBy: ANONYMOUS_USER_ID,
         createdAt: Timestamp.now()
       });
+      console.log('✅ Property added with ID:', docRef.id);
       return docRef.id;
     } catch (error) {
-      console.error('Error adding property:', error);
+      console.error('❌ Error adding property:', error);
       throw error;
     }
   }
 
   static async updateProperty(propertyId: string, updates: Partial<Property>): Promise<void> {
     try {
+      console.log('🔄 Updating property:', propertyId);
       const propertyRef = doc(db, 'properties', propertyId);
       await updateDoc(propertyRef, updates);
+      console.log('✅ Property updated successfully');
     } catch (error) {
-      console.error('Error updating property:', error);
+      console.error('❌ Error updating property:', error);
       throw error;
     }
   }
 
   static async deleteProperty(propertyId: string): Promise<void> {
     try {
+      console.log('🗑️ Deleting property:', propertyId);
+      
       // Delete property
       const propertyRef = doc(db, 'properties', propertyId);
       await deleteDoc(propertyRef);
@@ -97,8 +121,10 @@ export class FirebaseService {
       for (const billDoc of billsSnapshot.docs) {
         await deleteDoc(billDoc.ref);
       }
+      
+      console.log('✅ Property and related data deleted successfully');
     } catch (error) {
-      console.error('Error deleting property:', error);
+      console.error('❌ Error deleting property:', error);
       throw error;
     }
   }
@@ -106,54 +132,62 @@ export class FirebaseService {
   // Readings
   static async getReadings(propertyId: string): Promise<MeterReading[]> {
     try {
+      console.log('📊 Fetching readings for property:', propertyId);
       const readingsRef = collection(db, 'readings');
-      const q = query(
-        readingsRef, 
-        where('propertyId', '==', propertyId),
-        orderBy('date', 'desc')
-      );
+      const q = query(readingsRef, where('propertyId', '==', propertyId));
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({
+      const readings = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as MeterReading[];
+      
+      // Sort in memory
+      const sortedReadings = readings.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      console.log(`✅ Fetched ${sortedReadings.length} readings`);
+      return sortedReadings;
     } catch (error) {
-      console.error('Error getting readings:', error);
+      console.error('❌ Error getting readings:', error);
       return [];
     }
   }
 
   static async addReading(reading: Omit<MeterReading, 'id'>): Promise<string> {
     try {
+      console.log('📊 Adding reading for property:', reading.propertyId);
       const readingsRef = collection(db, 'readings');
       const docRef = await addDoc(readingsRef, {
         ...reading,
         createdBy: ANONYMOUS_USER_ID,
         createdAt: Timestamp.now()
       });
+      console.log('✅ Reading added with ID:', docRef.id);
       return docRef.id;
     } catch (error) {
-      console.error('Error adding reading:', error);
+      console.error('❌ Error adding reading:', error);
       throw error;
     }
   }
 
   static async updateReading(readingId: string, updates: Partial<MeterReading>): Promise<void> {
     try {
+      console.log('🔄 Updating reading:', readingId);
       const readingRef = doc(db, 'readings', readingId);
       await updateDoc(readingRef, updates);
+      console.log('✅ Reading updated successfully');
     } catch (error) {
-      console.error('Error updating reading:', error);
+      console.error('❌ Error updating reading:', error);
       throw error;
     }
   }
 
   static async deleteReading(readingId: string): Promise<void> {
     try {
+      console.log('🗑️ Deleting reading:', readingId);
       const readingRef = doc(db, 'readings', readingId);
       await deleteDoc(readingRef);
+      console.log('✅ Reading deleted successfully');
     } catch (error) {
-      console.error('Error deleting reading:', error);
+      console.error('❌ Error deleting reading:', error);
       throw error;
     }
   }
@@ -161,8 +195,8 @@ export class FirebaseService {
   // Bills
   static async getBills(propertyId: string): Promise<Bill[]> {
     try {
+      console.log('📊 Fetching bills for property:', propertyId);
       const billsRef = collection(db, 'bills');
-      // Remove the orderBy to avoid index requirement for now
       const q = query(billsRef, where('propertyId', '==', propertyId));
       const snapshot = await getDocs(q);
       const bills = snapshot.docs.map(doc => ({
@@ -170,109 +204,145 @@ export class FirebaseService {
         ...doc.data()
       })) as Bill[];
       
-      // Sort in memory instead
-      return bills.sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime());
+      // Sort in memory
+      const sortedBills = bills.sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime());
+      console.log(`✅ Fetched ${sortedBills.length} bills`);
+      return sortedBills;
     } catch (error) {
-      console.error('Error getting bills:', error);
+      console.error('❌ Error getting bills:', error);
       return [];
     }
   }
 
   static async addBill(bill: Omit<Bill, 'id'>): Promise<string> {
     try {
+      console.log('📊 Adding bill for property:', bill.propertyId);
       const billsRef = collection(db, 'bills');
       const docRef = await addDoc(billsRef, {
         ...bill,
         createdBy: ANONYMOUS_USER_ID,
         createdAt: Timestamp.now()
       });
+      console.log('✅ Bill added with ID:', docRef.id);
       return docRef.id;
     } catch (error) {
-      console.error('Error adding bill:', error);
+      console.error('❌ Error adding bill:', error);
       throw error;
     }
   }
 
   static async updateBill(billId: string, updates: Partial<Bill>): Promise<void> {
     try {
+      console.log('🔄 Updating bill:', billId);
       const billRef = doc(db, 'bills', billId);
       await updateDoc(billRef, updates);
+      console.log('✅ Bill updated successfully');
     } catch (error) {
-      console.error('Error updating bill:', error);
+      console.error('❌ Error updating bill:', error);
       throw error;
     }
   }
 
   static async deleteBill(billId: string): Promise<void> {
     try {
+      console.log('🗑️ Deleting bill:', billId);
       const billRef = doc(db, 'bills', billId);
       await deleteDoc(billRef);
+      console.log('✅ Bill deleted successfully');
     } catch (error) {
-      console.error('Error deleting bill:', error);
+      console.error('❌ Error deleting bill:', error);
       throw error;
     }
   }
 
-  // Real-time listeners
+  // Real-time listeners with better error handling
   static subscribeToProperties(callback: (properties: Property[]) => void): () => void {
+    console.log('🔄 Setting up properties subscription...');
     const propertiesRef = collection(db, 'properties');
-    return onSnapshot(propertiesRef, (snapshot) => {
-      const properties = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Property[];
-      callback(properties);
-    }, (error) => {
-      console.error('Error in properties subscription:', error);
-    });
+    
+    return onSnapshot(propertiesRef, 
+      (snapshot) => {
+        console.log('📡 Properties subscription update received');
+        const properties = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Property[];
+        callback(properties);
+      }, 
+      (error) => {
+        console.error('❌ Error in properties subscription:', error);
+        // Don't throw, just log the error to prevent infinite loops
+      }
+    );
   }
 
   static subscribeToReadings(propertyId: string, callback: (readings: MeterReading[]) => void): () => void {
+    console.log('🔄 Setting up readings subscription for property:', propertyId);
     const readingsRef = collection(db, 'readings');
-    // Remove orderBy to avoid index requirement
     const q = query(readingsRef, where('propertyId', '==', propertyId));
-    return onSnapshot(q, (snapshot) => {
-      const readings = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as MeterReading[];
-      
-      // Sort in memory instead
-      const sortedReadings = readings.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      callback(sortedReadings);
-    }, (error) => {
-      console.error('Error in readings subscription:', error);
-    });
+    
+    return onSnapshot(q, 
+      (snapshot) => {
+        console.log('📡 Readings subscription update received');
+        const readings = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as MeterReading[];
+        
+        // Sort in memory
+        const sortedReadings = readings.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        callback(sortedReadings);
+      }, 
+      (error) => {
+        console.error('❌ Error in readings subscription:', error);
+        // Don't throw, just log the error to prevent infinite loops
+      }
+    );
   }
 
   static subscribeToProperty(propertyId: string, callback: (property: Property | null) => void): () => void {
+    console.log('🔄 Setting up property subscription for:', propertyId);
     const propertyRef = doc(db, 'properties', propertyId);
-    return onSnapshot(propertyRef, (doc) => {
-      if (doc.exists()) {
-        callback({ id: doc.id, ...doc.data() } as Property);
-      } else {
+    
+    return onSnapshot(propertyRef, 
+      (doc) => {
+        console.log('📡 Property subscription update received');
+        if (doc.exists()) {
+          callback({ id: doc.id, ...doc.data() } as Property);
+        } else {
+          console.log('⚠️ Property not found:', propertyId);
+          callback(null);
+        }
+      }, 
+      (error) => {
+        console.error('❌ Error in property subscription:', error);
+        // Don't throw, just log the error to prevent infinite loops
         callback(null);
       }
-    }, (error) => {
-      console.error('Error in property subscription:', error);
-    });
+    );
   }
 
   static subscribeToBills(propertyId: string, callback: (bills: Bill[]) => void): () => void {
+    console.log('🔄 Setting up bills subscription for property:', propertyId);
     const billsRef = collection(db, 'bills');
-    // Remove orderBy to avoid index requirement
     const q = query(billsRef, where('propertyId', '==', propertyId));
-    return onSnapshot(q, (snapshot) => {
-      const bills = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Bill[];
-      
-      // Sort in memory instead
-      const sortedBills = bills.sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime());
-      callback(sortedBills);
-    }, (error) => {
-      console.error('Error in bills subscription:', error);
-    });
+    
+    return onSnapshot(q, 
+      (snapshot) => {
+        console.log('📡 Bills subscription update received');
+        const bills = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Bill[];
+        
+        // Sort in memory
+        const sortedBills = bills.sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime());
+        callback(sortedBills);
+      }, 
+      (error) => {
+        console.error('❌ Error in bills subscription:', error);
+        // Don't throw, just log the error to prevent infinite loops
+      }
+    );
   }
 }
