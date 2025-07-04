@@ -17,6 +17,8 @@ export function PropertySelector() {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
+
     const loadProperties = async () => {
       try {
         setLoading(true);
@@ -26,6 +28,9 @@ export function PropertySelector() {
         
         // Test Firebase connection first
         const isConnected = await FirebaseService.testConnection();
+        
+        if (!mounted) return;
+        
         setIsConnected(isConnected);
         
         if (!isConnected) {
@@ -37,15 +42,21 @@ export function PropertySelector() {
 
         console.log('✅ Firebase connected, loading properties...');
         const propertiesData = await FirebaseService.getProperties();
+        
+        if (!mounted) return;
+        
         console.log('📊 Properties loaded:', propertiesData);
         setProperties(propertiesData);
         
       } catch (error) {
+        if (!mounted) return;
         console.error('💥 Error loading properties:', error);
         setConnectionError(true);
         setIsConnected(false);
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -54,6 +65,7 @@ export function PropertySelector() {
     // Subscribe to real-time updates
     console.log('🔄 Setting up real-time subscription...');
     const unsubscribe = FirebaseService.subscribeToProperties((propertiesData) => {
+      if (!mounted) return;
       console.log('📡 Real-time update received:', propertiesData);
       setProperties(propertiesData);
       setConnectionError(false);
@@ -61,8 +73,13 @@ export function PropertySelector() {
     });
 
     return () => {
+      mounted = false;
       console.log('🔌 Cleaning up subscription');
-      unsubscribe();
+      try {
+        unsubscribe();
+      } catch (error) {
+        console.error('Error unsubscribing:', error);
+      }
     };
   }, []);
 
@@ -84,6 +101,10 @@ export function PropertySelector() {
   const handlePropertySelect = (property: Property) => {
     console.log('🏠 Selecting property:', property.name);
     navigate(`/property/${property.id}`);
+  };
+
+  const handleRetry = () => {
+    window.location.reload();
   };
 
   if (loading) {
@@ -117,7 +138,7 @@ export function PropertySelector() {
             Controlla la tua connessione internet e riprova.
           </p>
           <div className="space-y-3">
-            <Button onClick={() => window.location.reload()} className="w-full">
+            <Button onClick={handleRetry} className="w-full">
               🔄 Riprova Connessione
             </Button>
             <p className="text-xs text-gray-500">
@@ -160,36 +181,39 @@ export function PropertySelector() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
           {properties.map((property) => (
-            <Card key={property.id} className="hover:shadow-lg transition-shadow cursor-pointer">
+            <Card 
+              key={property.id} 
+              className="hover:shadow-lg transition-all duration-200 cursor-pointer transform hover:scale-105"
+            >
               <div 
                 onClick={() => handlePropertySelect(property)} 
                 className="p-4 sm:p-6 text-center"
               >
                 <div className="flex flex-col items-center space-y-3 mb-4">
-                  <div className="p-2 bg-primary-50 rounded-lg">
-                    <Home className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600" />
+                  <div className="p-3 bg-primary-50 rounded-lg">
+                    <Home className="h-6 w-6 text-primary-600" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900 text-sm sm:text-base">{property.name}</h3>
-                    <p className="text-xs sm:text-sm text-gray-600">
+                    <h3 className="font-semibold text-gray-900 text-lg">{property.name}</h3>
+                    <p className="text-sm text-gray-600">
                       {property.billingCycle === 'monthly' ? 'Mensile' : 'Bimestrale'}
                     </p>
                   </div>
                 </div>
                 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div className="flex items-center justify-center space-x-2">
-                    <Users className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400" />
-                    <p className="text-xs sm:text-sm text-gray-600">Proprietari ({property.owners.length}):</p>
+                    <Users className="h-4 w-4 text-gray-400" />
+                    <p className="text-sm text-gray-600">Proprietari ({property.owners.length}):</p>
                   </div>
-                  <div className="flex flex-wrap justify-center gap-1 sm:gap-2">
+                  <div className="flex flex-wrap justify-center gap-2">
                     {property.owners.map((owner) => (
-                      <div key={owner.id} className="flex items-center space-x-1">
+                      <div key={owner.id} className="flex items-center space-x-1 bg-gray-50 px-2 py-1 rounded-full">
                         <div 
-                          className="w-2 h-2 sm:w-3 sm:h-3 rounded-full"
+                          className="w-3 h-3 rounded-full"
                           style={{ backgroundColor: owner.color }}
                         />
-                        <span className="text-xs text-gray-700">{owner.name}</span>
+                        <span className="text-xs text-gray-700 font-medium">{owner.name}</span>
                       </div>
                     ))}
                   </div>
@@ -201,15 +225,16 @@ export function PropertySelector() {
           <Card className="border-2 border-dashed border-gray-300 hover:border-primary-400 transition-colors">
             <div 
               onClick={() => setShowCreateForm(true)}
-              className="flex flex-col items-center justify-center p-6 sm:p-8 cursor-pointer text-center"
+              className="flex flex-col items-center justify-center p-6 sm:p-8 cursor-pointer text-center hover:bg-gray-50 transition-colors"
             >
-              <Plus className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 mb-2" />
-              <span className="text-gray-600 font-medium text-sm sm:text-base">Nuova Proprietà</span>
+              <Plus className="h-8 w-8 text-gray-400 mb-3" />
+              <span className="text-gray-600 font-medium">Nuova Proprietà</span>
+              <span className="text-xs text-gray-500 mt-1">Clicca per aggiungere</span>
             </div>
           </Card>
         </div>
 
-        {/* Debug Info */}
+        {/* Debug Info - only in development */}
         {process.env.NODE_ENV === 'development' && (
           <div className="mt-8 p-4 bg-gray-100 rounded-lg text-xs text-gray-600">
             <p><strong>Debug Info:</strong></p>
