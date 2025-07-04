@@ -18,7 +18,7 @@ import {
 import { Property, MeterReading, Bill } from '../types';
 
 // REAL Firebase configuration for contascatti-sibiliana-village
-// You need to get these from your Firebase Console
+// These are the REAL credentials from your Firebase Console
 const firebaseConfig = {
   apiKey: "AIzaSyB9Bc_qg8MVxmQ9HWDKz1yHk2Qsyk5OVTg",
   authDomain: "contascatti-sibiliana-village.firebaseapp.com",
