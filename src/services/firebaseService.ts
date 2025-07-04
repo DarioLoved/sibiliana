@@ -20,12 +20,12 @@ import { Property, MeterReading, Bill } from '../types';
 // REAL Firebase configuration for contascatti-sibiliana-village
 // You need to get these from your Firebase Console
 const firebaseConfig = {
-  apiKey: "AIzaSyDYourRealApiKeyHere",
+  apiKey: "AIzaSyB9Bc_qg8MVxmQ9HWDKz1yHk2Qsyk5OVTg",
   authDomain: "contascatti-sibiliana-village.firebaseapp.com",
   projectId: "contascatti-sibiliana-village",
-  storageBucket: "contascatti-sibiliana-village.appspot.com",
-  messagingSenderId: "YourRealMessagingSenderId",
-  appId: "YourRealAppId"
+  storageBucket: "contascatti-sibiliana-village.firebasestorage.app",
+  messagingSenderId: "865795737084",
+  appId: "1:865795737084:web:a2b4aac044118cebaede79"
 };
 
 // Initialize Firebase
