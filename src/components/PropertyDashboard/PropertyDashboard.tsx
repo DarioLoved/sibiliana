@@ -20,7 +20,7 @@ import { FirebaseService } from '../../services/firebaseService';
 
 // Types
 import { Property, MeterReading, Bill } from '../../types';
-import { Loader2, AlertCircle, WifiOff } from 'lucide-react';
+import { Loader2, AlertCircle, WifiOff, Settings } from 'lucide-react';
 import { Button } from '../Common/Button';
 
 export function PropertyDashboard() {
@@ -69,10 +69,10 @@ export function PropertyDashboard() {
       if (loading) {
         console.log('⏰ Loading timeout reached');
         setLoadingTimeout(true);
-        setError('Timeout di caricamento. La connessione a Firebase potrebbe essere lenta o non disponibile.');
+        setError('Timeout di caricamento. Verifica la configurazione Firebase.');
         setLoading(false);
       }
-    }, 15000); // 15 seconds timeout
+    }, 10000); // 10 seconds timeout
 
     return () => clearTimeout(timeout);
   }, [loading]);
@@ -102,11 +102,11 @@ export function PropertyDashboard() {
         if (!mounted) return;
         
         if (!isConnected) {
-          throw new Error('Firebase connection failed. Please check your internet connection.');
+          throw new Error('Firebase non configurato correttamente. Controlla le credenziali nel file firebaseService.ts');
         }
         
         console.log('📊 Loading initial data...');
-        // Load initial data with timeout
+        // Load initial data with shorter timeout
         const loadPromise = Promise.all([
           FirebaseService.getProperties().then(props => {
             const found = props.find(p => p.id === propertyId);
@@ -118,7 +118,7 @@ export function PropertyDashboard() {
         ]);
 
         const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('Data loading timeout')), 10000);
+          setTimeout(() => reject(new Error('Data loading timeout')), 8000);
         });
 
         const [propertyData, readingsData, billsData] = await Promise.race([loadPromise, timeoutPromise]);
@@ -220,6 +220,10 @@ export function PropertyDashboard() {
 
   const handleBackToProperties = () => {
     navigate('/', { replace: true });
+  };
+
+  const handleRetry = () => {
+    window.location.reload();
   };
 
   const handleSaveReading = async (readingData: Omit<MeterReading, 'id' | 'propertyId'>) => {
@@ -391,10 +395,6 @@ export function PropertyDashboard() {
     }
   };
 
-  const handleRetry = () => {
-    window.location.reload();
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -430,13 +430,26 @@ export function PropertyDashboard() {
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center max-w-md mx-auto p-6">
           <div className="mb-4">
-            <WifiOff className="h-16 w-16 text-red-500 mx-auto mb-4" />
+            {error.includes('Firebase') ? (
+              <Settings className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
+            ) : (
+              <WifiOff className="h-16 w-16 text-red-500 mx-auto mb-4" />
+            )}
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Errore di Connessione</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            {error.includes('Firebase') ? 'Configurazione Firebase' : 'Errore di Connessione'}
+          </h2>
           <p className="text-gray-600 mb-6">
             {error}
-            <br />
-            Controlla la tua connessione internet e riprova.
+            {error.includes('Firebase') && (
+              <>
+                <br /><br />
+                <strong>Per risolvere:</strong>
+                <br />1. Vai su Firebase Console
+                <br />2. Copia le credenziali del progetto
+                <br />3. Aggiorna firebaseService.ts
+              </>
+            )}
           </p>
           <div className="space-y-3">
             <Button onClick={handleRetry} className="w-full">

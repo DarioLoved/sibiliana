@@ -17,19 +17,30 @@ import {
 } from 'firebase/firestore';
 import { Property, MeterReading, Bill } from '../types';
 
-// Firebase configuration for your project
+// REAL Firebase configuration for contascatti-sibiliana-village
+// You need to get these from your Firebase Console
 const firebaseConfig = {
-  apiKey: "AIzaSyBvOsXGVZ0X9X9X9X9X9X9X9X9X9X9X9X9",
+  apiKey: "AIzaSyDYourRealApiKeyHere",
   authDomain: "contascatti-sibiliana-village.firebaseapp.com",
   projectId: "contascatti-sibiliana-village",
   storageBucket: "contascatti-sibiliana-village.appspot.com",
-  messagingSenderId: "123456789012",
-  appId: "1:123456789012:web:abcdefghijklmnopqrstuvwxyz"
+  messagingSenderId: "YourRealMessagingSenderId",
+  appId: "YourRealAppId"
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+let app;
+let db;
+
+try {
+  app = initializeApp(firebaseConfig);
+  db = getFirestore(app);
+  console.log('🔥 Firebase initialized successfully');
+} catch (error) {
+  console.error('❌ Firebase initialization failed:', error);
+  // Create a mock database to prevent crashes
+  db = null;
+}
 
 // Simple user ID for anonymous usage
 const ANONYMOUS_USER_ID = 'anonymous-user';
@@ -42,8 +53,14 @@ let connectionState = {
 };
 
 export class FirebaseService {
-  // Test Firebase connection with timeout and retry logic
+  // Test Firebase connection with better error handling
   static async testConnection(): Promise<boolean> {
+    // If Firebase wasn't initialized, return false immediately
+    if (!db) {
+      console.log('❌ Firebase not initialized');
+      return false;
+    }
+
     const now = Date.now();
     
     // If we tested recently and it was successful, return cached result
@@ -61,11 +78,11 @@ export class FirebaseService {
           }
         }, 100);
         
-        // Timeout after 10 seconds
+        // Timeout after 5 seconds
         setTimeout(() => {
           clearInterval(checkInterval);
           resolve(false);
-        }, 10000);
+        }, 5000);
       });
     }
     
@@ -76,11 +93,11 @@ export class FirebaseService {
       
       // Create a timeout promise
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Connection timeout')), 10000);
+        setTimeout(() => reject(new Error('Connection timeout')), 5000);
       });
       
-      // Test connection with timeout
-      const testPromise = getDocs(collection(db, 'properties'));
+      // Test connection with a simple query
+      const testPromise = getDocs(query(collection(db, 'properties'), where('__name__', '!=', '')));
       
       await Promise.race([testPromise, timeoutPromise]);
       
@@ -99,15 +116,13 @@ export class FirebaseService {
 
   // Properties
   static async getProperties(): Promise<Property[]> {
+    if (!db) {
+      console.log('❌ Firebase not initialized, returning empty array');
+      return [];
+    }
+
     try {
       console.log('📊 Fetching properties...');
-      
-      // Test connection first
-      const isConnected = await this.testConnection();
-      if (!isConnected) {
-        console.log('❌ No connection, returning empty array');
-        return [];
-      }
       
       const propertiesRef = collection(db, 'properties');
       const snapshot = await getDocs(propertiesRef);
@@ -124,6 +139,10 @@ export class FirebaseService {
   }
 
   static async addProperty(property: Omit<Property, 'id'>): Promise<string> {
+    if (!db) {
+      throw new Error('Firebase not initialized');
+    }
+
     try {
       console.log('🏠 Adding property:', property.name);
       const propertiesRef = collection(db, 'properties');
@@ -141,6 +160,10 @@ export class FirebaseService {
   }
 
   static async updateProperty(propertyId: string, updates: Partial<Property>): Promise<void> {
+    if (!db) {
+      throw new Error('Firebase not initialized');
+    }
+
     try {
       console.log('🔄 Updating property:', propertyId);
       const propertyRef = doc(db, 'properties', propertyId);
@@ -153,6 +176,10 @@ export class FirebaseService {
   }
 
   static async deleteProperty(propertyId: string): Promise<void> {
+    if (!db) {
+      throw new Error('Firebase not initialized');
+    }
+
     try {
       console.log('🗑️ Deleting property:', propertyId);
       
@@ -187,6 +214,11 @@ export class FirebaseService {
 
   // Readings
   static async getReadings(propertyId: string): Promise<MeterReading[]> {
+    if (!db) {
+      console.log('❌ Firebase not initialized, returning empty array');
+      return [];
+    }
+
     try {
       console.log('📊 Fetching readings for property:', propertyId);
       const readingsRef = collection(db, 'readings');
@@ -208,6 +240,10 @@ export class FirebaseService {
   }
 
   static async addReading(reading: Omit<MeterReading, 'id'>): Promise<string> {
+    if (!db) {
+      throw new Error('Firebase not initialized');
+    }
+
     try {
       console.log('📊 Adding reading for property:', reading.propertyId);
       const readingsRef = collection(db, 'readings');
@@ -225,6 +261,10 @@ export class FirebaseService {
   }
 
   static async updateReading(readingId: string, updates: Partial<MeterReading>): Promise<void> {
+    if (!db) {
+      throw new Error('Firebase not initialized');
+    }
+
     try {
       console.log('🔄 Updating reading:', readingId);
       const readingRef = doc(db, 'readings', readingId);
@@ -237,6 +277,10 @@ export class FirebaseService {
   }
 
   static async deleteReading(readingId: string): Promise<void> {
+    if (!db) {
+      throw new Error('Firebase not initialized');
+    }
+
     try {
       console.log('🗑️ Deleting reading:', readingId);
       const readingRef = doc(db, 'readings', readingId);
@@ -250,6 +294,11 @@ export class FirebaseService {
 
   // Bills
   static async getBills(propertyId: string): Promise<Bill[]> {
+    if (!db) {
+      console.log('❌ Firebase not initialized, returning empty array');
+      return [];
+    }
+
     try {
       console.log('📊 Fetching bills for property:', propertyId);
       const billsRef = collection(db, 'bills');
@@ -271,6 +320,10 @@ export class FirebaseService {
   }
 
   static async addBill(bill: Omit<Bill, 'id'>): Promise<string> {
+    if (!db) {
+      throw new Error('Firebase not initialized');
+    }
+
     try {
       console.log('📊 Adding bill for property:', bill.propertyId);
       const billsRef = collection(db, 'bills');
@@ -288,6 +341,10 @@ export class FirebaseService {
   }
 
   static async updateBill(billId: string, updates: Partial<Bill>): Promise<void> {
+    if (!db) {
+      throw new Error('Firebase not initialized');
+    }
+
     try {
       console.log('🔄 Updating bill:', billId);
       const billRef = doc(db, 'bills', billId);
@@ -300,6 +357,10 @@ export class FirebaseService {
   }
 
   static async deleteBill(billId: string): Promise<void> {
+    if (!db) {
+      throw new Error('Firebase not initialized');
+    }
+
     try {
       console.log('🗑️ Deleting bill:', billId);
       const billRef = doc(db, 'bills', billId);
@@ -311,17 +372,17 @@ export class FirebaseService {
     }
   }
 
-  // Real-time listeners with better error handling and connection checks
+  // Real-time listeners - disabled if Firebase not initialized
   static subscribeToProperties(callback: (properties: Property[]) => void): () => void {
+    if (!db) {
+      console.log('❌ Firebase not initialized, returning empty subscription');
+      callback([]);
+      return () => {};
+    }
+
     console.log('🔄 Setting up properties subscription...');
     
-    let unsubscribed = false;
-    let retryCount = 0;
-    const maxRetries = 3;
-    
-    const setupSubscription = () => {
-      if (unsubscribed) return () => {};
-      
+    try {
       const propertiesRef = collection(db, 'properties');
       
       return onSnapshot(propertiesRef, 
@@ -332,48 +393,30 @@ export class FirebaseService {
             ...doc.data()
           })) as Property[];
           callback(properties);
-          retryCount = 0; // Reset retry count on success
         }, 
         (error) => {
           console.error('❌ Error in properties subscription:', error);
-          
-          if (retryCount < maxRetries && !unsubscribed) {
-            retryCount++;
-            console.log(`🔄 Retrying properties subscription (${retryCount}/${maxRetries})...`);
-            setTimeout(() => {
-              if (!unsubscribed) {
-                setupSubscription();
-              }
-            }, 2000 * retryCount); // Exponential backoff
-          } else {
-            console.log('❌ Max retries reached for properties subscription');
-            // Return empty array to prevent infinite loading
-            callback([]);
-          }
+          // Return empty array to prevent infinite loading
+          callback([]);
         }
       );
-    };
-    
-    const unsubscribe = setupSubscription();
-    
-    return () => {
-      unsubscribed = true;
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
+    } catch (error) {
+      console.error('❌ Error setting up properties subscription:', error);
+      callback([]);
+      return () => {};
+    }
   }
 
   static subscribeToReadings(propertyId: string, callback: (readings: MeterReading[]) => void): () => void {
+    if (!db) {
+      console.log('❌ Firebase not initialized, returning empty subscription');
+      callback([]);
+      return () => {};
+    }
+
     console.log('🔄 Setting up readings subscription for property:', propertyId);
     
-    let unsubscribed = false;
-    let retryCount = 0;
-    const maxRetries = 3;
-    
-    const setupSubscription = () => {
-      if (unsubscribed) return () => {};
-      
+    try {
       const readingsRef = collection(db, 'readings');
       const q = query(readingsRef, where('propertyId', '==', propertyId));
       
@@ -388,48 +431,30 @@ export class FirebaseService {
           // Sort in memory
           const sortedReadings = readings.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
           callback(sortedReadings);
-          retryCount = 0; // Reset retry count on success
         }, 
         (error) => {
           console.error('❌ Error in readings subscription:', error);
-          
-          if (retryCount < maxRetries && !unsubscribed) {
-            retryCount++;
-            console.log(`🔄 Retrying readings subscription (${retryCount}/${maxRetries})...`);
-            setTimeout(() => {
-              if (!unsubscribed) {
-                setupSubscription();
-              }
-            }, 2000 * retryCount); // Exponential backoff
-          } else {
-            console.log('❌ Max retries reached for readings subscription');
-            // Return empty array to prevent infinite loading
-            callback([]);
-          }
+          // Return empty array to prevent infinite loading
+          callback([]);
         }
       );
-    };
-    
-    const unsubscribe = setupSubscription();
-    
-    return () => {
-      unsubscribed = true;
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
+    } catch (error) {
+      console.error('❌ Error setting up readings subscription:', error);
+      callback([]);
+      return () => {};
+    }
   }
 
   static subscribeToProperty(propertyId: string, callback: (property: Property | null) => void): () => void {
+    if (!db) {
+      console.log('❌ Firebase not initialized, returning null');
+      callback(null);
+      return () => {};
+    }
+
     console.log('🔄 Setting up property subscription for:', propertyId);
     
-    let unsubscribed = false;
-    let retryCount = 0;
-    const maxRetries = 3;
-    
-    const setupSubscription = () => {
-      if (unsubscribed) return () => {};
-      
+    try {
       const propertyRef = doc(db, 'properties', propertyId);
       
       return onSnapshot(propertyRef, 
@@ -437,7 +462,6 @@ export class FirebaseService {
           console.log('📡 Property subscription update received');
           if (doc.exists()) {
             callback({ id: doc.id, ...doc.data() } as Property);
-            retryCount = 0; // Reset retry count on success
           } else {
             console.log('⚠️ Property not found:', propertyId);
             callback(null);
@@ -445,44 +469,27 @@ export class FirebaseService {
         }, 
         (error) => {
           console.error('❌ Error in property subscription:', error);
-          
-          if (retryCount < maxRetries && !unsubscribed) {
-            retryCount++;
-            console.log(`🔄 Retrying property subscription (${retryCount}/${maxRetries})...`);
-            setTimeout(() => {
-              if (!unsubscribed) {
-                setupSubscription();
-              }
-            }, 2000 * retryCount); // Exponential backoff
-          } else {
-            console.log('❌ Max retries reached for property subscription');
-            // Return null to prevent infinite loading
-            callback(null);
-          }
+          // Return null to prevent infinite loading
+          callback(null);
         }
       );
-    };
-    
-    const unsubscribe = setupSubscription();
-    
-    return () => {
-      unsubscribed = true;
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
+    } catch (error) {
+      console.error('❌ Error setting up property subscription:', error);
+      callback(null);
+      return () => {};
+    }
   }
 
   static subscribeToBills(propertyId: string, callback: (bills: Bill[]) => void): () => void {
+    if (!db) {
+      console.log('❌ Firebase not initialized, returning empty subscription');
+      callback([]);
+      return () => {};
+    }
+
     console.log('🔄 Setting up bills subscription for property:', propertyId);
     
-    let unsubscribed = false;
-    let retryCount = 0;
-    const maxRetries = 3;
-    
-    const setupSubscription = () => {
-      if (unsubscribed) return () => {};
-      
+    try {
       const billsRef = collection(db, 'bills');
       const q = query(billsRef, where('propertyId', '==', propertyId));
       
@@ -497,35 +504,17 @@ export class FirebaseService {
           // Sort in memory
           const sortedBills = bills.sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime());
           callback(sortedBills);
-          retryCount = 0; // Reset retry count on success
         }, 
         (error) => {
           console.error('❌ Error in bills subscription:', error);
-          
-          if (retryCount < maxRetries && !unsubscribed) {
-            retryCount++;
-            console.log(`🔄 Retrying bills subscription (${retryCount}/${maxRetries})...`);
-            setTimeout(() => {
-              if (!unsubscribed) {
-                setupSubscription();
-              }
-            }, 2000 * retryCount); // Exponential backoff
-          } else {
-            console.log('❌ Max retries reached for bills subscription');
-            // Return empty array to prevent infinite loading
-            callback([]);
-          }
+          // Return empty array to prevent infinite loading
+          callback([]);
         }
       );
-    };
-    
-    const unsubscribe = setupSubscription();
-    
-    return () => {
-      unsubscribed = true;
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
+    } catch (error) {
+      console.error('❌ Error setting up bills subscription:', error);
+      callback([]);
+      return () => {};
+    }
   }
 }
