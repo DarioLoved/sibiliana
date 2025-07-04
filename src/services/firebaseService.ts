@@ -96,8 +96,10 @@ export class FirebaseService {
         setTimeout(() => reject(new Error('Connection timeout')), 5000);
       });
       
-      // Test connection with a simple query
-      const testPromise = getDocs(query(collection(db, 'properties'), where('__name__', '!=', '')));
+      // Test connection with a simple document reference check
+      // This tests the connection without requiring any existing data
+      const testDocRef = doc(db, 'properties', 'firebase_connection_test_doc');
+      const testPromise = getDoc(testDocRef);
       
       await Promise.race([testPromise, timeoutPromise]);
       
