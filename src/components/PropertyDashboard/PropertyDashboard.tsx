@@ -33,6 +33,7 @@ export function PropertyDashboard() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
   
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -62,6 +63,20 @@ export function PropertyDashboard() {
     }
   }, [location.pathname]);
 
+  // Loading timeout to prevent infinite loading
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (loading) {
+        console.log('⏰ Loading timeout reached');
+        setLoadingTimeout(true);
+        setError('Timeout di caricamento. La connessione a Firebase potrebbe essere lenta o non disponibile.');
+        setLoading(false);
+      }
+    }, 15000); // 15 seconds timeout
+
+    return () => clearTimeout(timeout);
+  }, [loading]);
+
   // Load property data
   useEffect(() => {
     if (!propertyId) {
@@ -72,21 +87,27 @@ export function PropertyDashboard() {
 
     console.log('🚀 PropertyDashboard: Starting data load for property:', propertyId);
 
+    let mounted = true;
+    let unsubscribeFunctions: (() => void)[] = [];
+
     const loadData = async () => {
       try {
         setLoading(true);
         setError(null);
+        setLoadingTimeout(false);
         
         console.log('🔍 Testing Firebase connection...');
         const isConnected = await FirebaseService.testConnection();
         
+        if (!mounted) return;
+        
         if (!isConnected) {
-          throw new Error('Firebase connection failed');
+          throw new Error('Firebase connection failed. Please check your internet connection.');
         }
         
         console.log('📊 Loading initial data...');
-        // Load initial data
-        const [propertyData, readingsData, billsData] = await Promise.all([
+        // Load initial data with timeout
+        const loadPromise = Promise.all([
           FirebaseService.getProperties().then(props => {
             const found = props.find(p => p.id === propertyId);
             console.log('🏠 Property found:', found ? found.name : 'NOT FOUND');
@@ -95,6 +116,14 @@ export function PropertyDashboard() {
           FirebaseService.getReadings(propertyId),
           FirebaseService.getBills(propertyId)
         ]);
+
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Data loading timeout')), 10000);
+        });
+
+        const [propertyData, readingsData, billsData] = await Promise.race([loadPromise, timeoutPromise]);
+
+        if (!mounted) return;
 
         if (!propertyData) {
           console.log('❌ Property not found, redirecting to home');
@@ -106,51 +135,62 @@ export function PropertyDashboard() {
         setProperty(propertyData);
         setReadings(readingsData);
         setBills(billsData);
+        setLoading(false);
+        
+        // Subscribe to real-time updates only after initial load
+        console.log('🔄 Setting up real-time subscriptions...');
+        
+        const unsubscribeProperty = FirebaseService.subscribeToProperty(propertyId, (propertyData) => {
+          if (!mounted) return;
+          console.log('📡 Property update received:', propertyData ? propertyData.name : 'NULL');
+          if (propertyData) {
+            setProperty(propertyData);
+            setError(null);
+          } else {
+            console.log('❌ Property subscription returned null, redirecting');
+            navigate('/', { replace: true });
+          }
+        });
+
+        const unsubscribeReadings = FirebaseService.subscribeToReadings(propertyId, (readingsData) => {
+          if (!mounted) return;
+          console.log('📡 Readings update received:', readingsData.length, 'readings');
+          setReadings(readingsData);
+        });
+
+        const unsubscribeBills = FirebaseService.subscribeToBills(propertyId, (billsData) => {
+          if (!mounted) return;
+          console.log('📡 Bills update received:', billsData.length, 'bills');
+          setBills(billsData);
+        });
+
+        unsubscribeFunctions = [unsubscribeProperty, unsubscribeReadings, unsubscribeBills];
         
       } catch (error) {
+        if (!mounted) return;
         console.error('💥 Error loading data:', error);
         setError(error instanceof Error ? error.message : 'Errore di caricamento');
+        setLoading(false);
         addNotification({
           type: 'error',
           title: 'Errore di Caricamento',
           message: 'Errore nel caricamento dei dati. Riprova.'
         });
-      } finally {
-        setLoading(false);
       }
     };
 
     loadData();
 
-    // Subscribe to real-time updates
-    console.log('🔄 Setting up real-time subscriptions...');
-    
-    const unsubscribeProperty = FirebaseService.subscribeToProperty(propertyId, (propertyData) => {
-      console.log('📡 Property update received:', propertyData ? propertyData.name : 'NULL');
-      if (propertyData) {
-        setProperty(propertyData);
-        setError(null);
-      } else {
-        console.log('❌ Property subscription returned null, redirecting');
-        navigate('/', { replace: true });
-      }
-    });
-
-    const unsubscribeReadings = FirebaseService.subscribeToReadings(propertyId, (readingsData) => {
-      console.log('📡 Readings update received:', readingsData.length, 'readings');
-      setReadings(readingsData);
-    });
-
-    const unsubscribeBills = FirebaseService.subscribeToBills(propertyId, (billsData) => {
-      console.log('📡 Bills update received:', billsData.length, 'bills');
-      setBills(billsData);
-    });
-
     return () => {
+      mounted = false;
       console.log('🔌 Cleaning up subscriptions for property:', propertyId);
-      unsubscribeProperty();
-      unsubscribeReadings();
-      unsubscribeBills();
+      unsubscribeFunctions.forEach(unsubscribe => {
+        try {
+          unsubscribe();
+        } catch (error) {
+          console.error('Error unsubscribing:', error);
+        }
+      });
     };
   }, [propertyId, navigate, addNotification]);
 
@@ -351,18 +391,35 @@ export function PropertyDashboard() {
     }
   };
 
+  const handleRetry = () => {
+    window.location.reload();
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-center">
+        <div className="text-center max-w-md mx-auto p-6">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600 mx-auto mb-4" />
           <div className="text-xl font-semibold text-gray-700 mb-2">Caricamento dati...</div>
-          <div className="text-sm text-gray-500">Connessione a Firebase in corso...</div>
-          <div className="mt-4 flex items-center justify-center space-x-2">
+          <div className="text-sm text-gray-500 mb-4">Connessione a Firebase in corso...</div>
+          <div className="mt-4 flex items-center justify-center space-x-2 mb-6">
             <div className="w-2 h-2 bg-primary-600 rounded-full animate-pulse"></div>
             <div className="w-2 h-2 bg-primary-600 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
             <div className="w-2 h-2 bg-primary-600 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
           </div>
+          {loadingTimeout && (
+            <div className="space-y-3">
+              <p className="text-sm text-yellow-600">
+                Il caricamento sta richiedendo più tempo del previsto...
+              </p>
+              <Button onClick={handleRetry} variant="secondary" className="w-full">
+                🔄 Riprova
+              </Button>
+              <Button onClick={handleBackToProperties} variant="ghost" className="w-full">
+                ← Torna alle Proprietà
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -382,7 +439,7 @@ export function PropertyDashboard() {
             Controlla la tua connessione internet e riprova.
           </p>
           <div className="space-y-3">
-            <Button onClick={() => window.location.reload()} className="w-full">
+            <Button onClick={handleRetry} className="w-full">
               🔄 Riprova Connessione
             </Button>
             <Button onClick={handleBackToProperties} variant="secondary" className="w-full">

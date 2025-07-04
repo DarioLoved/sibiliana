@@ -17,7 +17,7 @@ import {
 } from 'firebase/firestore';
 import { Property, MeterReading, Bill } from '../types';
 
-// Real Firebase configuration for your project
+// Firebase configuration for your project
 const firebaseConfig = {
   apiKey: "AIzaSyBvOsXGVZ0X9X9X9X9X9X9X9X9X9X9X9X9",
   authDomain: "contascatti-sibiliana-village.firebaseapp.com",
@@ -34,18 +34,66 @@ const db = getFirestore(app);
 // Simple user ID for anonymous usage
 const ANONYMOUS_USER_ID = 'anonymous-user';
 
+// Connection state management
+let connectionState = {
+  isConnected: false,
+  lastTestTime: 0,
+  testInProgress: false
+};
+
 export class FirebaseService {
-  // Test Firebase connection
+  // Test Firebase connection with timeout and retry logic
   static async testConnection(): Promise<boolean> {
+    const now = Date.now();
+    
+    // If we tested recently and it was successful, return cached result
+    if (connectionState.isConnected && (now - connectionState.lastTestTime) < 30000) {
+      return true;
+    }
+    
+    // If a test is already in progress, wait for it
+    if (connectionState.testInProgress) {
+      return new Promise((resolve) => {
+        const checkInterval = setInterval(() => {
+          if (!connectionState.testInProgress) {
+            clearInterval(checkInterval);
+            resolve(connectionState.isConnected);
+          }
+        }, 100);
+        
+        // Timeout after 10 seconds
+        setTimeout(() => {
+          clearInterval(checkInterval);
+          resolve(false);
+        }, 10000);
+      });
+    }
+    
+    connectionState.testInProgress = true;
+    
     try {
       console.log('🔍 Testing Firebase connection...');
-      const testRef = collection(db, 'test');
-      await getDocs(testRef);
+      
+      // Create a timeout promise
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Connection timeout')), 10000);
+      });
+      
+      // Test connection with timeout
+      const testPromise = getDocs(collection(db, 'properties'));
+      
+      await Promise.race([testPromise, timeoutPromise]);
+      
       console.log('✅ Firebase connection successful');
+      connectionState.isConnected = true;
+      connectionState.lastTestTime = now;
       return true;
     } catch (error) {
       console.error('❌ Firebase connection failed:', error);
+      connectionState.isConnected = false;
       return false;
+    } finally {
+      connectionState.testInProgress = false;
     }
   }
 
@@ -53,6 +101,14 @@ export class FirebaseService {
   static async getProperties(): Promise<Property[]> {
     try {
       console.log('📊 Fetching properties...');
+      
+      // Test connection first
+      const isConnected = await this.testConnection();
+      if (!isConnected) {
+        console.log('❌ No connection, returning empty array');
+        return [];
+      }
+      
       const propertiesRef = collection(db, 'properties');
       const snapshot = await getDocs(propertiesRef);
       const properties = snapshot.docs.map(doc => ({
@@ -255,94 +311,221 @@ export class FirebaseService {
     }
   }
 
-  // Real-time listeners with better error handling
+  // Real-time listeners with better error handling and connection checks
   static subscribeToProperties(callback: (properties: Property[]) => void): () => void {
     console.log('🔄 Setting up properties subscription...');
-    const propertiesRef = collection(db, 'properties');
     
-    return onSnapshot(propertiesRef, 
-      (snapshot) => {
-        console.log('📡 Properties subscription update received');
-        const properties = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Property[];
-        callback(properties);
-      }, 
-      (error) => {
-        console.error('❌ Error in properties subscription:', error);
-        // Don't throw, just log the error to prevent infinite loops
+    let unsubscribed = false;
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    const setupSubscription = () => {
+      if (unsubscribed) return () => {};
+      
+      const propertiesRef = collection(db, 'properties');
+      
+      return onSnapshot(propertiesRef, 
+        (snapshot) => {
+          console.log('📡 Properties subscription update received');
+          const properties = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as Property[];
+          callback(properties);
+          retryCount = 0; // Reset retry count on success
+        }, 
+        (error) => {
+          console.error('❌ Error in properties subscription:', error);
+          
+          if (retryCount < maxRetries && !unsubscribed) {
+            retryCount++;
+            console.log(`🔄 Retrying properties subscription (${retryCount}/${maxRetries})...`);
+            setTimeout(() => {
+              if (!unsubscribed) {
+                setupSubscription();
+              }
+            }, 2000 * retryCount); // Exponential backoff
+          } else {
+            console.log('❌ Max retries reached for properties subscription');
+            // Return empty array to prevent infinite loading
+            callback([]);
+          }
+        }
+      );
+    };
+    
+    const unsubscribe = setupSubscription();
+    
+    return () => {
+      unsubscribed = true;
+      if (unsubscribe) {
+        unsubscribe();
       }
-    );
+    };
   }
 
   static subscribeToReadings(propertyId: string, callback: (readings: MeterReading[]) => void): () => void {
     console.log('🔄 Setting up readings subscription for property:', propertyId);
-    const readingsRef = collection(db, 'readings');
-    const q = query(readingsRef, where('propertyId', '==', propertyId));
     
-    return onSnapshot(q, 
-      (snapshot) => {
-        console.log('📡 Readings subscription update received');
-        const readings = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as MeterReading[];
-        
-        // Sort in memory
-        const sortedReadings = readings.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        callback(sortedReadings);
-      }, 
-      (error) => {
-        console.error('❌ Error in readings subscription:', error);
-        // Don't throw, just log the error to prevent infinite loops
+    let unsubscribed = false;
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    const setupSubscription = () => {
+      if (unsubscribed) return () => {};
+      
+      const readingsRef = collection(db, 'readings');
+      const q = query(readingsRef, where('propertyId', '==', propertyId));
+      
+      return onSnapshot(q, 
+        (snapshot) => {
+          console.log('📡 Readings subscription update received');
+          const readings = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as MeterReading[];
+          
+          // Sort in memory
+          const sortedReadings = readings.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          callback(sortedReadings);
+          retryCount = 0; // Reset retry count on success
+        }, 
+        (error) => {
+          console.error('❌ Error in readings subscription:', error);
+          
+          if (retryCount < maxRetries && !unsubscribed) {
+            retryCount++;
+            console.log(`🔄 Retrying readings subscription (${retryCount}/${maxRetries})...`);
+            setTimeout(() => {
+              if (!unsubscribed) {
+                setupSubscription();
+              }
+            }, 2000 * retryCount); // Exponential backoff
+          } else {
+            console.log('❌ Max retries reached for readings subscription');
+            // Return empty array to prevent infinite loading
+            callback([]);
+          }
+        }
+      );
+    };
+    
+    const unsubscribe = setupSubscription();
+    
+    return () => {
+      unsubscribed = true;
+      if (unsubscribe) {
+        unsubscribe();
       }
-    );
+    };
   }
 
   static subscribeToProperty(propertyId: string, callback: (property: Property | null) => void): () => void {
     console.log('🔄 Setting up property subscription for:', propertyId);
-    const propertyRef = doc(db, 'properties', propertyId);
     
-    return onSnapshot(propertyRef, 
-      (doc) => {
-        console.log('📡 Property subscription update received');
-        if (doc.exists()) {
-          callback({ id: doc.id, ...doc.data() } as Property);
-        } else {
-          console.log('⚠️ Property not found:', propertyId);
-          callback(null);
+    let unsubscribed = false;
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    const setupSubscription = () => {
+      if (unsubscribed) return () => {};
+      
+      const propertyRef = doc(db, 'properties', propertyId);
+      
+      return onSnapshot(propertyRef, 
+        (doc) => {
+          console.log('📡 Property subscription update received');
+          if (doc.exists()) {
+            callback({ id: doc.id, ...doc.data() } as Property);
+            retryCount = 0; // Reset retry count on success
+          } else {
+            console.log('⚠️ Property not found:', propertyId);
+            callback(null);
+          }
+        }, 
+        (error) => {
+          console.error('❌ Error in property subscription:', error);
+          
+          if (retryCount < maxRetries && !unsubscribed) {
+            retryCount++;
+            console.log(`🔄 Retrying property subscription (${retryCount}/${maxRetries})...`);
+            setTimeout(() => {
+              if (!unsubscribed) {
+                setupSubscription();
+              }
+            }, 2000 * retryCount); // Exponential backoff
+          } else {
+            console.log('❌ Max retries reached for property subscription');
+            // Return null to prevent infinite loading
+            callback(null);
+          }
         }
-      }, 
-      (error) => {
-        console.error('❌ Error in property subscription:', error);
-        // Don't throw, just log the error to prevent infinite loops
-        callback(null);
+      );
+    };
+    
+    const unsubscribe = setupSubscription();
+    
+    return () => {
+      unsubscribed = true;
+      if (unsubscribe) {
+        unsubscribe();
       }
-    );
+    };
   }
 
   static subscribeToBills(propertyId: string, callback: (bills: Bill[]) => void): () => void {
     console.log('🔄 Setting up bills subscription for property:', propertyId);
-    const billsRef = collection(db, 'bills');
-    const q = query(billsRef, where('propertyId', '==', propertyId));
     
-    return onSnapshot(q, 
-      (snapshot) => {
-        console.log('📡 Bills subscription update received');
-        const bills = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Bill[];
-        
-        // Sort in memory
-        const sortedBills = bills.sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime());
-        callback(sortedBills);
-      }, 
-      (error) => {
-        console.error('❌ Error in bills subscription:', error);
-        // Don't throw, just log the error to prevent infinite loops
+    let unsubscribed = false;
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    const setupSubscription = () => {
+      if (unsubscribed) return () => {};
+      
+      const billsRef = collection(db, 'bills');
+      const q = query(billsRef, where('propertyId', '==', propertyId));
+      
+      return onSnapshot(q, 
+        (snapshot) => {
+          console.log('📡 Bills subscription update received');
+          const bills = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as Bill[];
+          
+          // Sort in memory
+          const sortedBills = bills.sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime());
+          callback(sortedBills);
+          retryCount = 0; // Reset retry count on success
+        }, 
+        (error) => {
+          console.error('❌ Error in bills subscription:', error);
+          
+          if (retryCount < maxRetries && !unsubscribed) {
+            retryCount++;
+            console.log(`🔄 Retrying bills subscription (${retryCount}/${maxRetries})...`);
+            setTimeout(() => {
+              if (!unsubscribed) {
+                setupSubscription();
+              }
+            }, 2000 * retryCount); // Exponential backoff
+          } else {
+            console.log('❌ Max retries reached for bills subscription');
+            // Return empty array to prevent infinite loading
+            callback([]);
+          }
+        }
+      );
+    };
+    
+    const unsubscribe = setupSubscription();
+    
+    return () => {
+      unsubscribed = true;
+      if (unsubscribe) {
+        unsubscribe();
       }
-    );
+    };
   }
 }
